@@ -229,7 +229,7 @@
 
     async function loadChatHistory() {
         try {
-            const response = await fetch(historyWebhookUrl);
+            const response = await fetch(historyWebhookUrl, { method: 'POST' });
             if (!response.ok) {
                 throw new Error('Ошибка при загрузке истории чата.');
             }
@@ -306,6 +306,7 @@
 </body>
 
 </html>
+
 
 
 
