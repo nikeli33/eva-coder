@@ -1,283 +1,316 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>Eva - AI-программист</title>
-  <link rel="icon" href="assets/icon.ico" type="image/x-icon">
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #f0f2f5;
-      margin: 0;
-      padding: 20px;
-      background-image: url('assets/background.png');
-      background-size: cover;
-      background-attachment: fixed;
-      background-position: center;
-    }
-    #bg-video {
-      position: fixed; right: 0; bottom: 0;
-      min-width: 100%; min-height: 100%;
-      z-index: -100; opacity: 0.1; background-size: cover;
-    }
-    .chat-container {
-      max-width: 900px; margin: auto; background: #fff;
-      border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.1);
-      display: flex; flex-direction: column; height: 90vh;
-      background-color: rgba(255,255,255,.98);
-    }
-    .chat-messages {
-      flex-grow: 1; padding: 20px; overflow-y: auto;
-      border-bottom: 1px solid #eee;
-    }
-    .message { margin-bottom: 15px; display: flex; align-items: flex-end; }
-    .user-message, .human-message { justify-content: flex-end; }
-    .ai-message { justify-content: flex-start; }
-    .avatar {
-      width: 40px; height: 40px; border-radius: 50%;
-      margin-right: 10px; object-fit: cover;
-    }
-    .ai-message .avatar { order: -1; }
-    .user-message .avatar, .human-message .avatar {
-      margin-left: 10px; margin-right: 0;
-    }
-    .user-message .bubble, .human-message .bubble {
-      background-color: #007bff; color: white;
-      border-radius: 20px 20px 5px 20px;
-      padding: 10px 15px; max-width: 85%; word-break: break-word;
-    }
-    .ai-message .bubble {
-      background-color: #e9e9eb; color: #333;
-      border-radius: 20px 20px 20px 5px;
-      padding: 10px 15px; max-width: 85%; word-break: break-word;
-    }
-    .ai-message .bubble pre { position: relative; }
-    .ai-message .bubble pre code {
-      background-color: #333; color: #f8f8f2; border-radius: 5px;
-      padding: 10px; display: block; overflow-x: auto;
-    }
-    .copy-button {
-      position: absolute; top: 5px; right: 5px;
-      background-color: rgba(255,255,255,.2); color: #fff;
-      border: none; padding: 5px 10px; border-radius: 3px;
-      cursor: pointer; font-size: 12px; opacity: 0; transition: opacity .2s;
-    }
-    .ai-message .bubble pre:hover .copy-button { opacity: 1; }
-    .copy-button:hover { background-color: rgba(255,255,255,.4); }
+    <meta charset="UTF-8">
+    <title>Eva - AI-программист</title>
+    <link rel="icon" href="assets/icon.ico" type="image/x-icon">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            background-image: url('assets/background.png');
+            background-size: cover;
+            background-attachment: fixed;
+            background-position: center;
+        }
 
-    /* ===== Ввод и кнопки ===== */
-    .chat-input {
-      display: flex;
-      flex-direction: column;
-      padding: 15px;
-      border-top: 1px solid #eee;
-    }
-    .input-group {
-      display: flex;
-      width: 100%;
-      margin-bottom: 10px;
-    }
-    .chat-input input {
-      flex-grow: 1;
-      border: 1px solid #ccc;
-      border-radius: 20px;
-      padding: 10px 15px;
-      font-size: 16px;
-      outline: none;
-      transition: border-color .3s;
-    }
-    .chat-input input:focus { border-color: #007bff; }
+        #bg-video {
+            position: fixed;
+            right: 0;
+            bottom: 0;
+            min-width: 100%;
+            min-height: 100%;
+            width: auto;
+            height: auto;
+            z-index: -100;
+            background-size: cover;
+            opacity: 0.1
+        }
 
-    .button-group {
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 10px;
-    }
-    .chat-input button {
-      padding: 10px 20px;
-      border: none;
-      background-color: #007bff;
-      color: white;
-      border-radius: 20px;
-      cursor: pointer;
-      transition: background-color .3s;
-    }
-    .chat-input button:hover { background-color: #0056b3; }
+        .chat-container {
+            max-width: 900px;
+            margin: auto;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            height: 90vh;
+            background-color: rgba(255, 255, 255, 0.98);
+        }
+        .chat-messages { flex-grow: 1; padding: 20px; overflow-y: auto; border-bottom: 1px solid #eee; }
+        .message { margin-bottom: 15px; display: flex; align-items: flex-end; }
+        .user-message, .human-message { justify-content: flex-end; }
+        .ai-message { justify-content: flex-start; }
 
-    .image-upload-label {
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      background-color: #f8f9fa;
-      border: 1px solid #ccc;
-      border-radius: 20px;
-      padding: 10px 14px;
-    }
-    .image-upload-label svg { display: block; }
-    .chat-image {
-      max-width: 220px; border-radius: 8px; margin-top: 6px; display: block; cursor: zoom-in;
-    }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 10px;
+            object-fit: cover;
+        }
+        .ai-message .avatar {
+            order: -1;
+        }
+        .user-message .avatar, .human-message .avatar {
+            margin-left: 10px;
+            margin-right: 0;
+        }
 
-    .loader {
-      width: 20px; height: 20px;
-      border: 3px solid #f3f3f3;
-      border-top: 3px solid #007bff;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      display: none;
-      margin-top: 10px;
-    }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .user-message .bubble, .human-message .bubble { background-color: #007bff; color: white; border-radius: 20px 20px 5px 20px; padding: 10px 15px; max-width: 70%; }
+        .ai-message .bubble { background-color: #e9e9eb; color: #333; border-radius: 20px 20px 20px 5px; padding: 10px 15px; max-width: 70%; }
+        
+        .ai-message .bubble pre {
+            position: relative;
+        }
+        .ai-message .bubble pre code {
+            background-color: #333;
+            color: #f8f8f2;
+            border-radius: 5px;
+            padding: 10px;
+            display: block;
+            overflow-x: auto;
+            box-sizing: border-box;
+        }
+        .copy-button {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+            z-index: 10;
+        }
+        .ai-message .bubble pre:hover .copy-button {
+            opacity: 1;
+        }
+        .copy-button:hover {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
 
-    /* ===== Мобильная адаптация ===== */
-    @media (max-width: 1024px) {
-      body { padding: 0; }
-      .chat-container {
-        max-width: 100%; height: 100vh; margin: 0;
-        border-radius: 0; box-shadow: none;
-      }
-      .chat-messages { padding: 10px; }
-      .chat-input { padding: 10px; }
-      .button-group {
-        flex-wrap: nowrap;
-        justify-content: flex-start;
-      }
-      .chat-input button,
-      .image-upload-label {
-        flex: none;
-        min-width: auto;
-      }
-    }
-  </style>
+        .chat-input {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border-top: 1px solid #eee;
+        }
+        .chat-input input {
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            padding: 10px 15px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .chat-input input:focus { border-color: #007bff; }
+        .chat-input button {
+            margin-left: 10px;
+            padding: 10px 20px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .chat-input button:hover { background-color: #0056b3; }
+        .loader {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: none;
+            margin-left: 10px;
+            align-self: center;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .image-upload-label {
+            cursor: pointer;
+            margin-left: 10px;
+            padding: 5px;
+            display: flex;
+            align-items: center;
+        }
+        .image-upload-label svg {
+            display: block;
+        }
+    </style>
 </head>
 <body>
 
 <video autoplay muted loop playsinline id="bg-video">
-  <source src="assets/background.mp4" type="video/mp4">
+    <source src="assets/background2.mp4" type="video/mp4">
 </video>
 
 <div class="chat-container">
-  <div class="chat-messages" id="chat-messages"></div>
-
-  <!-- Блок ввода -->
-  <div class="chat-input">
-    <div class="input-group">
-      <input type="text" id="message-input" placeholder="Введите ваше сообщение...">
+    <div class="chat-messages" id="chat-messages">
     </div>
-
-    <!-- Кнопки под полем -->
-    <div class="button-group">
-      <button onclick="sendMessage()">Отправить</button>
-      <label for="image-upload" class="image-upload-label">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#007bff" viewBox="0 0 16 16">
-          <path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/>
-          <path d="M11 5.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5z"/>
-          <path d="M12.5 14a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5z"/>
-          <path d="M4.5 10.5a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5z"/>
-          <path d="M12.016 1.13a.5.5 0 0 1 .555.103l2.85 2.85a.5.5 0 0 1 .103.556l-9.155 9.155a.5.5 0 0 1-.16.104l-2.614.653a.5.5 0 0 1-.64-.64l.653-2.614a.5.5 0 0 1 .104-.16z"/>
-        </svg>
-      </label>
-      <input type="file" id="image-upload" accept="image/*" style="display:none;">
+    <div class="chat-input">
+        <input type="text" id="message-input" placeholder="Введите ваше сообщение...">
+        <label for="image-upload" class="image-upload-label">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#007bff" viewBox="0 0 16 16">
+                <path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/>
+                <path d="M11 5.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5z"/>
+                <path d="M12.5 14a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5z"/>
+                <path d="M4.5 10.5a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5z"/>
+                <path d="M12.016 1.13a.5.5 0 0 1 .555.103l2.85 2.85a.5.5 0 0 1 .103.556l-9.155 9.155a.5.5 0 0 1-.16.104l-2.614.653a.5.5 0 0 1-.64-.64l.653-2.614a.5.5 0 0 1 .104-.16z"/>
+            </svg>
+        </label>
+        <input type="file" id="image-upload" accept="image/*" style="display:none;">
+        <button onclick="sendMessage()">Отправить</button>
+        <div class="loader" id="loader"></div>
     </div>
-
-    <div class="loader" id="loader"></div>
-  </div>
 </div>
 
 <script>
-  const webhookUrl = 'https://n8n.eva-dragon.ru/webhook/my-chat-local';
-  const historyWebhookUrl = 'https://n8n.eva-dragon.ru/webhook/get-chat-history-local';
+    const webhookUrl = 'https://n8n.eva-dragon.ru/webhook/my-chat';
+    const historyWebhookUrl = 'https://n8n.eva-dragon.ru/webhook/get-chat-history';
 
-  function displayMessageInChat(rawText, type) {
-    const messagesContainer = document.getElementById('chat-messages');
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${type}-message`;
+    function displayMessageInChat(text, type) {
+        const messagesContainer = document.getElementById('chat-messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}-message`;
 
-    if (type === 'ai') {
-      const avatarImg = document.createElement('img');
-      avatarImg.className = 'avatar';
-      avatarImg.src = 'assets/eva.jpg';
-      avatarImg.alt = 'AI Avatar';
-      messageDiv.appendChild(avatarImg);
+        if (type === 'ai') {
+            const avatarImg = document.createElement('img');
+            avatarImg.className = 'avatar';
+            avatarImg.src = 'assets/eva.jpg';
+            avatarImg.alt = 'AI Avatar';
+            messageDiv.appendChild(avatarImg);
+        }
+
+        const bubbleDiv = document.createElement('div');
+        bubbleDiv.className = 'bubble';
+        if (type === 'ai') {
+            const parsedText = marked.parse(text);
+            bubbleDiv.innerHTML = parsedText;
+
+            const codeBlocks = bubbleDiv.querySelectorAll('pre code');
+            codeBlocks.forEach(codeBlock => {
+                const preElement = codeBlock.parentElement;
+                const copyButton = document.createElement('button');
+                copyButton.innerText = 'Copy';
+                copyButton.className = 'copy-button';
+
+                copyButton.addEventListener('click', () => {
+                    const codeText = codeBlock.innerText;
+                    navigator.clipboard.writeText(codeText).then(() => {
+                        copyButton.innerText = 'Copied!';
+                        setTimeout(() => {
+                            copyButton.innerText = 'Copy';
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Не удалось скопировать текст: ', err);
+                    });
+                });
+                preElement.appendChild(copyButton);
+            });
+        } else {
+            bubbleDiv.innerText = text;
+        }
+
+        messageDiv.appendChild(bubbleDiv);
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
-    const bubbleDiv = document.createElement('div');
-    bubbleDiv.className = 'bubble';
-
-    if (type === 'ai') {
-      bubbleDiv.innerHTML = marked.parse(rawText);
-      bubbleDiv.querySelectorAll('pre code').forEach(codeBlock => {
-        const pre = codeBlock.parentElement;
-        const btn = document.createElement('button');
-        btn.innerText = 'Copy';
-        btn.className = 'copy-button';
-        btn.onclick = () => {
-          navigator.clipboard.writeText(codeBlock.innerText)
-            .then(() => { btn.innerText = 'Copied!'; setTimeout(() => btn.innerText = 'Copy', 2000); })
-            .catch(err => console.error(err));
-        };
-        pre.appendChild(btn);
-      });
-    } else {
-      bubbleDiv.innerHTML = rawText;
+    async function loadChatHistory() {
+        try {
+            const response = await fetch(historyWebhookUrl, { method: 'POST' });
+            if (!response.ok) {
+                throw new Error('Ошибка при загрузке истории чата.');
+            }
+            const chatHistory = await response.json();
+            chatHistory.forEach(msg => displayMessageInChat(msg.json.message, msg.json.type));
+        } catch (error) {
+            console.error('Ошибка:', error);
+            displayMessageInChat('Извините, произошла ошибка при загрузке истории чата.', 'ai');
+        }
     }
 
-    messageDiv.appendChild(bubbleDiv);
-    messagesContainer.appendChild(messageDiv);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  }
+    async function sendMessage() {
+        const inputElement = document.getElementById('message-input');
+        const imageInput = document.getElementById('image-upload');
+        const messageText = inputElement.value.trim();
+        const imageFile = imageInput.files[0];
 
-  async function loadChatHistory() {
-    try {
-      const response = await fetch(historyWebhookUrl);
-      if (!response.ok) throw new Error('Ошибка при загрузке истории чата.');
-      const chatHistory = await response.json();
-      chatHistory.forEach(msg => displayMessageInChat(msg.content, msg.type));
-    } catch (error) {
-      console.error(error);
-      displayMessageInChat('Извините, произошла ошибка при загрузке истории чата.', 'ai');
+        if (messageText === '' && !imageFile) return;
+
+        if (messageText !== '') {
+            displayMessageInChat(messageText, 'user');
+        }
+        if (imageFile) {
+            displayMessageInChat(`Image uploaded: ${imageFile.name}`, 'user');
+        }
+
+        inputElement.value = '';
+        imageInput.value = '';
+
+        const loader = document.getElementById('loader');
+        loader.style.display = 'block';
+
+        try {
+            const formData = new FormData();
+            if (messageText !== '') {
+                formData.append('message', messageText);
+            }
+            if (imageFile) {
+                formData.append('image', imageFile);
+            }
+
+            const response = await fetch(webhookUrl, {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                throw new Error('Ошибка при получении ответа от n8n.');
+            }
+
+            const data = await response.json();
+            const aiResponseText = data.output;
+            displayMessageInChat(aiResponseText, 'ai');
+
+        } catch (error) {
+            console.error('Ошибка:', error);
+            displayMessageInChat('Извините, произошла ошибка. Пожалуйста, попробуйте еще раз.', 'ai');
+        } finally {
+            loader.style.display = 'none';
+        }
     }
-  }
 
-  async function sendMessage() {
-    const input = document.getElementById('message-input');
-    const fileInput = document.getElementById('image-upload');
-    const text = input.value.trim();
-    const file = fileInput.files[0];
+    document.addEventListener('DOMContentLoaded', () => {
+        loadChatHistory();
+    });
 
-    if (!text && !file) return;
-
-    if (text) displayMessageInChat(text, 'user');
-    if (file) displayMessageInChat(`Image uploaded: ${file.name}`, 'user');
-
-    input.value = '';
-    fileInput.value = '';
-    const loader = document.getElementById('loader');
-    loader.style.display = 'block';
-
-    try {
-      const formData = new FormData();
-      if (text) formData.append('message', text);
-      if (file) formData.append('image', file);
-
-      const res = await fetch(webhookUrl, { method: 'POST', body: formData });
-      if (!res.ok) throw new Error('Network error');
-      const data = await res.json();
-      displayMessageInChat(data.output, 'ai');
-    } catch (e) {
-      console.error(e);
-      displayMessageInChat('Извините, произошла ошибка. Попробуйте ещё раз.', 'ai');
-    } finally {
-      loader.style.display = 'none';
-    }
-  }
-
-  document.addEventListener('DOMContentLoaded', loadChatHistory);
-  document.getElementById('message-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }
-  });
+    document.getElementById('message-input').addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            sendMessage();
+        }
+    });
 </script>
 </body>
+
 </html>
+
+
+
+
+
+
+
+
