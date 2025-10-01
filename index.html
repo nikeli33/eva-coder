@@ -27,7 +27,7 @@
             height: auto;
             z-index: -100;
             background-size: cover;
-            opacity: 0.1
+            opacity: 0.1;
         }
 
         .chat-container {
@@ -41,8 +41,20 @@
             height: 90vh;
             background-color: rgba(255, 255, 255, 0.98);
         }
-        .chat-messages { flex-grow: 1; padding: 20px; overflow-y: auto; border-bottom: 1px solid #eee; }
-        .message { margin-bottom: 15px; display: flex; align-items: flex-end; }
+
+        .chat-messages {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            border-bottom: 1px solid #eee;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-end;
+        }
+
         .user-message, .human-message { justify-content: flex-end; }
         .ai-message { justify-content: flex-start; }
 
@@ -53,20 +65,36 @@
             margin-right: 10px;
             object-fit: cover;
         }
+
         .ai-message .avatar {
             order: -1;
         }
+
         .user-message .avatar, .human-message .avatar {
             margin-left: 10px;
             margin-right: 0;
         }
 
-        .user-message .bubble, .human-message .bubble { background-color: #007bff; color: white; border-radius: 20px 20px 5px 20px; padding: 10px 15px; max-width: 70%; }
-        .ai-message .bubble { background-color: #e9e9eb; color: #333; border-radius: 20px 20px 20px 5px; padding: 10px 15px; max-width: 70%; }
-        
+        .user-message .bubble, .human-message .bubble {
+            background-color: #007bff;
+            color: white;
+            border-radius: 20px 20px 5px 20px;
+            padding: 10px 15px;
+            max-width: 70%;
+        }
+
+        .ai-message .bubble {
+            background-color: #e9e9eb;
+            color: #333;
+            border-radius: 20px 20px 20px 5px;
+            padding: 10px 15px;
+            max-width: 70%;
+        }
+
         .ai-message .bubble pre {
             position: relative;
         }
+
         .ai-message .bubble pre code {
             background-color: #333;
             color: #f8f8f2;
@@ -76,6 +104,7 @@
             overflow-x: auto;
             box-sizing: border-box;
         }
+
         .copy-button {
             position: absolute;
             top: 5px;
@@ -91,20 +120,48 @@
             transition: opacity 0.2s ease-in-out;
             z-index: 10;
         }
+
         .ai-message .bubble pre:hover .copy-button {
             opacity: 1;
         }
+
         .copy-button:hover {
             background-color: rgba(255, 255, 255, 0.4);
         }
 
+        /* 🔽 Новый блок с кнопками слева */
         .chat-input {
             display: flex;
             align-items: center;
             padding: 15px;
             border-top: 1px solid #eee;
+            gap: 10px;
+            flex-wrap: wrap;
         }
-        .chat-input input {
+
+        .chat-input button#send-button {
+            padding: 10px 18px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            flex-shrink: 0;
+        }
+
+        .chat-input button#send-button:hover {
+            background-color: #0056b3;
+        }
+
+        .image-upload-label {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .chat-input input[type="text"] {
             flex-grow: 1;
             border: 1px solid #ccc;
             border-radius: 20px;
@@ -112,19 +169,13 @@
             font-size: 16px;
             outline: none;
             transition: border-color 0.3s;
+            min-width: 150px;
         }
-        .chat-input input:focus { border-color: #007bff; }
-        .chat-input button {
-            margin-left: 10px;
-            padding: 10px 20px;
-            border: none;
-            background-color: #007bff;
-            color: white;
-            border-radius: 20px;
-            cursor: pointer;
-            transition: background-color 0.3s;
+
+        .chat-input input[type="text"]:focus {
+            border-color: #007bff;
         }
-        .chat-input button:hover { background-color: #0056b3; }
+
         .loader {
             width: 20px;
             height: 20px;
@@ -133,19 +184,23 @@
             border-radius: 50%;
             animation: spin 1s linear infinite;
             display: none;
-            margin-left: 10px;
             align-self: center;
         }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .image-upload-label {
-            cursor: pointer;
-            margin-left: 10px;
-            padding: 5px;
-            display: flex;
-            align-items: center;
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
-        .image-upload-label svg {
-            display: block;
+
+        /* 📱 Мобильная адаптация */
+        @media (max-width: 600px) {
+            .chat-input {
+                flex-wrap: wrap;
+            }
+            .chat-input input[type="text"] {
+                order: 3;
+                width: 100%;
+            }
         }
     </style>
 </head>
@@ -156,10 +211,11 @@
 </video>
 
 <div class="chat-container">
-    <div class="chat-messages" id="chat-messages">
-    </div>
+    <div class="chat-messages" id="chat-messages"></div>
+
     <div class="chat-input">
-        <input type="text" id="message-input" placeholder="Введите ваше сообщение...">
+        <button id="send-button" onclick="sendMessage()">Отправить</button>
+
         <label for="image-upload" class="image-upload-label">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#007bff" viewBox="0 0 16 16">
                 <path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/>
@@ -170,7 +226,8 @@
             </svg>
         </label>
         <input type="file" id="image-upload" accept="image/*" style="display:none;">
-        <button onclick="sendMessage()">Отправить</button>
+
+        <input type="text" id="message-input" placeholder="Введите ваше сообщение...">
         <div class="loader" id="loader"></div>
     </div>
 </div>
@@ -209,12 +266,8 @@
                     const codeText = codeBlock.innerText;
                     navigator.clipboard.writeText(codeText).then(() => {
                         copyButton.innerText = 'Copied!';
-                        setTimeout(() => {
-                            copyButton.innerText = 'Copy';
-                        }, 2000);
-                    }).catch(err => {
-                        console.error('Не удалось скопировать текст: ', err);
-                    });
+                        setTimeout(() => copyButton.innerText = 'Copy', 2000);
+                    }).catch(err => console.error('Не удалось скопировать текст: ', err));
                 });
                 preElement.appendChild(copyButton);
             });
@@ -230,9 +283,7 @@
     async function loadChatHistory() {
         try {
             const response = await fetch(historyWebhookUrl, { method: 'POST' });
-            if (!response.ok) {
-                throw new Error('Ошибка при загрузке истории чата.');
-            }
+            if (!response.ok) throw new Error('Ошибка при загрузке истории чата.');
             const chatHistory = await response.json();
             chatHistory.forEach(msg => displayMessageInChat(msg.json.message, msg.json.type));
         } catch (error) {
@@ -249,12 +300,8 @@
 
         if (messageText === '' && !imageFile) return;
 
-        if (messageText !== '') {
-            displayMessageInChat(messageText, 'user');
-        }
-        if (imageFile) {
-            displayMessageInChat(`Image uploaded: ${imageFile.name}`, 'user');
-        }
+        if (messageText !== '') displayMessageInChat(messageText, 'user');
+        if (imageFile) displayMessageInChat(`Image uploaded: ${imageFile.name}`, 'user');
 
         inputElement.value = '';
         imageInput.value = '';
@@ -264,21 +311,11 @@
 
         try {
             const formData = new FormData();
-            if (messageText !== '') {
-                formData.append('message', messageText);
-            }
-            if (imageFile) {
-                formData.append('image', imageFile);
-            }
+            if (messageText !== '') formData.append('message', messageText);
+            if (imageFile) formData.append('image', imageFile);
 
-            const response = await fetch(webhookUrl, {
-                method: 'POST',
-                body: formData,
-            });
-
-            if (!response.ok) {
-                throw new Error('Ошибка при получении ответа от n8n.');
-            }
+            const response = await fetch(webhookUrl, { method: 'POST', body: formData });
+            if (!response.ok) throw new Error('Ошибка при получении ответа от n8n.');
 
             const data = await response.json();
             const aiResponseText = data.output;
@@ -292,9 +329,7 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        loadChatHistory();
-    });
+    document.addEventListener('DOMContentLoaded', loadChatHistory);
 
     document.getElementById('message-input').addEventListener('keydown', function(event) {
         if (event.key === 'Enter') {
@@ -304,13 +339,4 @@
     });
 </script>
 </body>
-
 </html>
-
-
-
-
-
-
-
-
