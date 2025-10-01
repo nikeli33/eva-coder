@@ -177,6 +177,28 @@
             .chat-actions button#send-button { flex: 1 1 auto; min-width: 120px; }
             .image-upload-label { flex: 0 0 auto; }
         }
+        /* 📱 Мобильная версия — аватарка под сообщением */
+        @media (max-width: 600px) {
+          .message.ai-message,
+          .message.user-message,
+          .message.human-message {
+            flex-direction: column-reverse;
+            align-items: flex-start;
+          }
+
+          .message .avatar {
+            margin: 6px 0 0 0;
+            width: 28px;
+            height: 28px;
+          }
+
+          .ai-message .bubble,
+          .user-message .bubble,
+          .human-message .bubble {
+            max-width: 100%;
+          }
+        }
+
     </style>
 </head>
 <body>
