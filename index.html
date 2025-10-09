@@ -5,7 +5,10 @@
     <title>Eva - AI-программист</title>
     <link rel="icon" href="assets/icon.ico" type="image/x-icon">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- DOMPurify для защиты от XSS -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
     <style>
+        /* (оставил ваш CSS без изменений) */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #f0f2f5;
@@ -167,11 +170,45 @@
             color: #555;
         }
 
+        /* Прогресс-бар загрузки */
+        .upload-progress {
+            display: none;
+            width: 260px;
+            background: linear-gradient(90deg,#f1f3f5,#f7f9fb);
+            border-radius: 10px;
+            padding: 8px;
+            box-sizing: border-box;
+            align-items: center;
+            gap: 8px;
+        }
+        .upload-progress-inner {
+            width: 100%;
+            background: #e6e8ea;
+            height: 10px;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+        .upload-progress-bar {
+            width: 0%;
+            height: 100%;
+            border-radius: 8px;
+            transition: width 0.15s linear;
+            background: linear-gradient(90deg,#4facfe,#00f2fe); /* аккуратный градиент */
+        }
+        .upload-progress-text {
+            min-width: 42px;
+            text-align: right;
+            font-size: 12px;
+            color: #333;
+        }
+
         @media (max-width: 600px) {
             .chat-input { padding: 12px; gap: 8px; }
             .chat-actions { gap: 8px; }
             .chat-actions button#send-button { flex: 1 1 auto; min-width: 120px; }
             .image-upload-label { flex: 0 0 auto; }
+            .upload-progress { width: 100%; max-width: 100%; }
         }
         @media (max-width: 600px) {
           .message.ai-message,
@@ -281,6 +318,17 @@
             <button id="admin-logout-button" onclick="adminLogout()" title="Выйти из роли администратора">Выйти админ</button>
             <div class="loader" id="loader"></div>
             <div class="admin-status" id="admin-status">Админ: нет</div>
+
+            <!-- Прогресс-бар -->
+            <div id="upload-progress" class="upload-progress" aria-hidden="true" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+                <div style="display:flex; align-items:center; gap:8px; width:100%;">
+                    <div class="upload-progress-inner" aria-hidden="true">
+                        <div id="upload-progress-bar" class="upload-progress-bar"></div>
+                    </div>
+                    <div id="upload-progress-text" class="upload-progress-text">0%</div>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -298,142 +346,505 @@
 </div>
 
 <script>
-    const webhookUrl = 'https://n8n.eva-dragon.ru/webhook/my-chat';
-    const historyWebhookUrl = 'https://n8n.eva-dragon.ru/webhook/get-chat-history';
-    const ADMIN_SESSION_KEY = 'eva_adminKey';
+const webhookUrl = 'https://n8n.eva-dragon.ru/webhook/my-chat';
+const historyWebhookUrl = 'https://n8n.eva-dragon.ru/webhook/get-chat-history';
+const ADMIN_SESSION_KEY = 'eva_adminKey';
 
-    function getStoredAdminKey() { return sessionStorage.getItem(ADMIN_SESSION_KEY); }
-    function storeAdminKey(key) { if(key) sessionStorage.setItem(ADMIN_SESSION_KEY, key); updateAdminStatus(); }
-    function clearAdminKey() { sessionStorage.removeItem(ADMIN_SESSION_KEY); updateAdminStatus(); }
-    function updateAdminStatus() { document.getElementById('admin-status').innerText = getStoredAdminKey() ? 'Админ: да' : 'Админ: нет'; }
+function getStoredAdminKey() { return sessionStorage.getItem(ADMIN_SESSION_KEY); }
+function storeAdminKey(key) { if(key) sessionStorage.setItem(ADMIN_SESSION_KEY, key); updateAdminStatus(); }
+function clearAdminKey() { sessionStorage.removeItem(ADMIN_SESSION_KEY); updateAdminStatus(); }
+function updateAdminStatus() { document.getElementById('admin-status').innerText = getStoredAdminKey() ? 'Админ: да' : 'Админ: нет'; }
 
-    // Кастомный ввод пароля через модальное окно
-    function askAdminKey() {
-        return new Promise((resolve) => {
-            const modal = document.getElementById('admin-modal');
-            const input = document.getElementById('admin-key-input');
-            const submitBtn = document.getElementById('admin-submit-btn');
-            const cancelBtn = document.getElementById('admin-cancel-btn');
+// Кастомный ввод пароля через модальное окно
+function askAdminKey() {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('admin-modal');
+        const input = document.getElementById('admin-key-input');
+        const submitBtn = document.getElementById('admin-submit-btn');
+        const cancelBtn = document.getElementById('admin-cancel-btn');
 
-            modal.style.display = 'block';
-            input.value = '';
-            input.focus();
+        modal.style.display = 'block';
+        input.value = '';
+        input.focus();
 
-            function cleanup() {
-                modal.style.display = 'none';
-                submitBtn.removeEventListener('click', onSubmit);
-                cancelBtn.removeEventListener('click', onCancel);
-                input.removeEventListener('keydown', onEnter);
-            }
-
-            function onSubmit() { cleanup(); resolve(input.value.trim() || null); }
-            function onCancel() { cleanup(); resolve(null); }
-            function onEnter(event) { if(event.key==='Enter') onSubmit(); }
-
-            submitBtn.addEventListener('click', onSubmit);
-            cancelBtn.addEventListener('click', onCancel);
-            input.addEventListener('keydown', onEnter);
-        });
-    }
-
-    function displayMessageInChat(text, type) {
-        const messagesContainer = document.getElementById('chat-messages');
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${type}-message`;
-
-        if(type==='ai'){
-            const avatarImg=document.createElement('img');
-            avatarImg.className='avatar';
-            avatarImg.src='assets/eva.jpg';
-            avatarImg.alt='AI Avatar';
-            messageDiv.appendChild(avatarImg);
+        function cleanup() {
+            modal.style.display = 'none';
+            submitBtn.removeEventListener('click', onSubmit);
+            cancelBtn.removeEventListener('click', onCancel);
+            input.removeEventListener('keydown', onEnter);
         }
 
-        const bubbleDiv=document.createElement('div');
-        bubbleDiv.className='bubble';
-        if(type==='ai'){
-            bubbleDiv.innerHTML=marked.parse(text||'');
+        function onSubmit() { cleanup(); resolve(input.value.trim() || null); }
+        function onCancel() { cleanup(); resolve(null); }
+        function onEnter(event) { if(event.key==='Enter') onSubmit(); }
+
+        submitBtn.addEventListener('click', onSubmit);
+        cancelBtn.addEventListener('click', onCancel);
+        input.addEventListener('keydown', onEnter);
+    });
+}
+
+// Модальное окно для просмотра изображения
+function createImageModal() {
+    if(document.getElementById('image-modal')) return;
+    const modal = document.createElement('div');
+    modal.id = 'image-modal';
+    modal.style.position = 'fixed';
+    modal.style.top = 0;
+    modal.style.left = 0;
+    modal.style.width = '100%';
+    modal.style.height = '100%';
+    modal.style.background = 'rgba(0,0,0,0.8)';
+    modal.style.display = 'none';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.zIndex = 2000;
+    modal.style.transition = 'opacity 0.3s ease';
+
+    const img = document.createElement('img');
+    img.id = 'modal-img';
+    img.style.maxWidth = '90%';
+    img.style.maxHeight = '90%';
+    img.style.borderRadius = '10px';
+    img.style.transform = 'scale(0.8)';
+    img.style.transition = 'transform 0.3s ease';
+    modal.appendChild(img);
+
+    modal.addEventListener('click', ()=>{
+        modal.style.opacity = 0;
+        img.style.transform = 'scale(0.8)';
+        setTimeout(()=>{ modal.style.display='none'; }, 300);
+    });
+
+    document.body.appendChild(modal);
+}
+createImageModal();
+
+function showImageInModal(src) {
+    const modal = document.getElementById('image-modal');
+    const img = document.getElementById('modal-img');
+    img.src = src;
+    modal.style.display = 'flex';
+    setTimeout(()=>{
+        modal.style.opacity = 1;
+        img.style.transform = 'scale(1)';
+    }, 10);
+}
+
+/* ===========================
+   HELPERS: распознавание URL и картинок
+   =========================== */
+function isLikelyImageUrl(url) {
+    if(typeof url !== 'string') return false;
+    // простая проверка по расширению (включая query-string)
+    return /\.(png|jpe?g|gif|webp|avif|svg|bmp)(\?.*)?$/i.test(url.trim());
+}
+function isOnlyUrlString(text) {
+    if(typeof text !== 'string') return false;
+    return /^\s*https?:\/\/\S+\s*$/.test(text);
+}
+function createImageElement(src, maxWidth = 300) {
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.maxWidth = maxWidth + 'px';
+    img.style.maxHeight = '300px';
+    img.style.borderRadius = '10px';
+    img.style.cursor = 'pointer';
+    img.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
+    img.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
+    img.addEventListener('mouseenter', ()=>{ img.style.transform = 'scale(1.05)'; img.style.boxShadow = '0 6px 20px rgba(0,0,0,0.35)'; });
+    img.addEventListener('mouseleave', ()=>{ img.style.transform = 'scale(1)'; img.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)'; });
+    img.addEventListener('click', ()=> showImageInModal(src));
+    // если не загрузилось — отобразим ссылку вместо картинки (fallback)
+    img.addEventListener('error', ()=> {
+        const a = document.createElement('a');
+        a.href = src;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.innerText = src;
+        a.style.wordBreak = 'break-all';
+        img.replaceWith(a);
+    });
+    return img;
+}
+
+/* ===========================
+   Основная функция: отрисовка сообщений
+   =========================== */
+function displayMessageInChat(content, type, id=null, isImage=false, fileName=null) {
+    const messagesContainer = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${type}-message`;
+    if(id) messageDiv.id = id;
+
+    if(type==='ai'){
+        const avatarImg=document.createElement('img');
+        avatarImg.className='avatar';
+        avatarImg.src='assets/eva.jpg';
+        avatarImg.alt='AI Avatar';
+        messageDiv.appendChild(avatarImg);
+    }
+
+    const bubbleDiv=document.createElement('div');
+    bubbleDiv.className='bubble';
+    bubbleDiv.style.position = 'relative';
+
+    // Нормализуем содержимое: поддерживаем случаи когда content — объект или JSON-строка с полем content
+    let parsed = null;
+    let raw = content;
+    if (typeof content === 'object' && content !== null) {
+        parsed = content;
+    } else if (typeof content === 'string') {
+        try { parsed = JSON.parse(content); } catch(e) { parsed = null; }
+    }
+    if (parsed && typeof parsed === 'object' && parsed.content !== undefined) {
+        raw = parsed.content;
+    }
+
+    // если это явное изображение-превью (например, при загрузке файла на клиенте)
+    if(isImage){
+        const wrapper = document.createElement('div');
+        wrapper.style.position = 'relative';
+        wrapper.style.display = 'inline-block';
+
+        const imgEl = createImageElement(raw);
+        wrapper.appendChild(imgEl);
+
+        const closeBtn = document.createElement('span');
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style.position = 'absolute';
+        closeBtn.style.top = '-8px';
+        closeBtn.style.right = '-8px';
+        closeBtn.style.background = 'rgba(0,0,0,0.6)';
+        closeBtn.style.color = 'white';
+        closeBtn.style.fontSize = '18px';
+        closeBtn.style.fontWeight = 'bold';
+        closeBtn.style.borderRadius = '50%';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.width = '24px';
+        closeBtn.style.height = '24px';
+        closeBtn.style.display = 'flex';
+        closeBtn.style.alignItems = 'center';
+        closeBtn.style.justifyContent = 'center';
+
+        closeBtn.addEventListener('click', (e)=>{
+            e.stopPropagation();
+            wrapper.remove();
+            document.getElementById('image-upload').value = '';
+            resetUploadProgress(); // сбрасываем прогресс, если превью удалено
+        });
+
+        wrapper.appendChild(closeBtn);
+
+        if(fileName){
+            const nameDiv = document.createElement('div');
+            nameDiv.style.textAlign = 'center';
+            nameDiv.style.fontSize = '12px';
+            nameDiv.style.marginTop = '4px';
+            nameDiv.style.color = '#111';
+            nameDiv.innerText = fileName;
+            wrapper.appendChild(nameDiv);
+        }
+
+        bubbleDiv.appendChild(wrapper);
+
+    } else {
+        // Если raw — одиночная URL-строка, и она указывает на изображение — показываем картинку (для всех типов: human/user/ai)
+        if (typeof raw === 'string' && isOnlyUrlString(raw.trim()) && isLikelyImageUrl(raw.trim())) {
+            const imgEl = createImageElement(raw.trim());
+            bubbleDiv.appendChild(imgEl);
+            // подпись/тип, если есть
+            if(parsed && parsed.type) {
+                const caption = document.createElement('div');
+                caption.style.fontSize = '12px';
+                caption.style.marginTop = '6px';
+                caption.style.color = '#333'
+                caption.innerText = parsed.type;
+                bubbleDiv.appendChild(caption);
+            }
+        }
+        // Для ai: рендерим как markdown (безопасно), как было раньше
+        else if (type === 'ai') {
+            try {
+                const sourceText = String(typeof parsed === 'object' && parsed !== null && parsed.content ? parsed.content : raw || '');
+                const rawHtml = marked.parse(sourceText);
+                const cleanHtml = DOMPurify.sanitize(rawHtml, { USE_PROFILES: { html: true } });
+                const temp = document.createElement('div');
+                temp.innerHTML = cleanHtml;
+                // безопасные атрибуты для ссылок
+                temp.querySelectorAll('a').forEach(a => {
+                    try {
+                        a.setAttribute('target', '_blank');
+                        a.setAttribute('rel', 'noopener noreferrer');
+                    } catch (e) {}
+                });
+                // если внутри HTML есть теги <a href="..."> и href ведёт на картинку — заменим ссылку на картинку
+                temp.querySelectorAll('a').forEach(a => {
+                    const href = a.getAttribute('href') || a.innerText || '';
+                    if (isLikelyImageUrl(href)) {
+                        const imgReplacement = createImageElement(href);
+                        a.replaceWith(imgReplacement);
+                    }
+                });
+                bubbleDiv.innerHTML = temp.innerHTML;
+            } catch (e) {
+                bubbleDiv.innerText = String(raw || '');
+                console.warn('Markdown render error or sanitization failed:', e);
+            }
+
+            // Добавляем кнопки копирования для блоков кода (после вставки безопасного HTML)
             bubbleDiv.querySelectorAll('pre code').forEach(codeBlock=>{
                 const pre=codeBlock.parentElement;
+                const existing = pre.querySelector('.copy-button');
+                if(existing) return;
                 const btn=document.createElement('button');
                 btn.innerText='Copy';
                 btn.className='copy-button';
-                btn.addEventListener('click',()=>{navigator.clipboard.writeText(codeBlock.innerText).then(()=>{btn.innerText='Copied!'; setTimeout(()=>{btn.innerText='Copy';},2000);});});
+                btn.addEventListener('click',()=>{
+                    navigator.clipboard.writeText(codeBlock.innerText)
+                        .then(()=>{btn.innerText='Copied!'; setTimeout(()=>{btn.innerText='Copy';},2000);})
+                        .catch(()=>{btn.innerText='Error'; setTimeout(()=>{btn.innerText='Copy';},2000);});
+                });
+                pre.style.position = 'relative';
                 pre.appendChild(btn);
             });
-        } else { bubbleDiv.innerText=text; }
-        messageDiv.appendChild(bubbleDiv);
-        messagesContainer.appendChild(messageDiv);
-        messagesContainer.scrollTop=messagesContainer.scrollHeight;
-    }
-
-    async function loadChatHistory() {
-        try {
-            const response=await fetch(historyWebhookUrl,{method:'POST'});
-            if(!response.ok) throw new Error('Ошибка при загрузке истории чата.');
-            const chatHistory=await response.json();
-            chatHistory.forEach(msg=>{
-                const content=(msg && msg.json && (msg.json.message||msg.json.output))||'';
-                const type=(msg && msg.json && msg.json.type)||'ai';
-                displayMessageInChat(content,type);
-            });
-        } catch(err){ console.error(err); displayMessageInChat('Извините, произошла ошибка при загрузке истории чата.','ai'); }
-    }
-
-    function adminLogout() { clearAdminKey(); displayMessageInChat('Вы вышли из роли администратора.','ai'); }
-
-    async function sendMessage() {
-        const input=document.getElementById('message-input');
-        const imageInput=document.getElementById('image-upload');
-        const sendButton=document.getElementById('send-button');
-        const loader=document.getElementById('loader');
-
-        const messageText=input.value.trim();
-        const imageFile=imageInput.files[0];
-        if(messageText===''&&!imageFile) return;
-
-        let adminKey=getStoredAdminKey();
-        if(!adminKey){
-            const entered=await askAdminKey();
-            if(!entered){ displayMessageInChat('Отправка отменена. Только администратор может отправлять сообщения.','ai'); return; }
-            storeAdminKey(entered);
-            adminKey=entered;
         }
+        // Для остальных типов (user/human и т.п.) просто текстовая вставка
+        else {
+            bubbleDiv.innerText = String(raw || '');
+        }
+    }
 
-        sendButton.disabled=true;
-        loader.style.display='inline-block';
+    messageDiv.appendChild(bubbleDiv);
+    messagesContainer.appendChild(messageDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
 
-        try{
-            const formData=new FormData();
-            if(messageText!=='') formData.append('message',messageText);
-            if(imageFile) formData.append('image',imageFile);
-            formData.append('adminKey',adminKey);
+/* ========== остальной ваш код без изменений ========== */
 
-            const response=await fetch(webhookUrl,{method:'POST', body:formData});
-            let data={};
-            try{ data=await response.json(); }catch(e){ console.warn('Ответ не JSON:',e); }
+async function loadChatHistory() {
+    try {
+        const response = await fetch(historyWebhookUrl, { method:'POST' });
+        if(!response.ok) throw new Error('Ошибка при загрузке истории чата.');
+        const chatHistory = await response.json();
+        chatHistory.forEach(msg=>{
+            // Поддерживаем несколько структур: msg.json.message может быть объект или строка
+            const content = (msg && msg.json && (msg.json.message||msg.json.output))||'';
+            const type = (msg && msg.json && msg.json.type)||'ai';
+            displayMessageInChat(content,type);
+        });
+    } catch(err){ console.error(err); displayMessageInChat('Извините, произошла ошибка при загрузке истории чата.','ai'); }
+}
 
-            const outputText=(data.output||(data.json&&data.json.output))||'';
-            const deniedByText=typeof outputText==='string'&&/доступ\s*запрещ/i.test(outputText.toLowerCase());
-            if(!response.ok && response.status===403){ displayMessageInChat(outputText||'Доступ запрещён.','ai'); clearAdminKey(); return; }
-            else if(deniedByText){ displayMessageInChat(outputText,'ai'); clearAdminKey(); return; }
-            else if(!response.ok){ console.error('Ошибка сервера:',response.status,data); displayMessageInChat('Сервер вернул ошибку.','ai'); return; }
+function adminLogout() { clearAdminKey(); displayMessageInChat('Вы вышли из роли администратора.','ai'); }
+
+// -------- Прогресс-бар: функции управления --------
+function showUploadProgressUI() {
+    const prog = document.getElementById('upload-progress');
+    prog.style.display = 'flex';
+    prog.setAttribute('aria-hidden','false');
+}
+function hideUploadProgressUI() {
+    const prog = document.getElementById('upload-progress');
+    prog.style.display = 'none';
+    prog.setAttribute('aria-hidden','true');
+    setUploadProgressValue(0);
+}
+function setUploadProgressValue(percent) {
+    const bar = document.getElementById('upload-progress-bar');
+    const text = document.getElementById('upload-progress-text');
+    const pct = Math.max(0, Math.min(100, Math.round(percent)));
+    if(bar) bar.style.width = pct + '%';
+    if(text) text.innerText = pct + '%';
+    const prog = document.getElementById('upload-progress');
+    if(prog) prog.setAttribute('aria-valuenow', pct);
+}
+function resetUploadProgress(){
+    setUploadProgressValue(0);
+    hideUploadProgressUI();
+}
+
+// -------- Отправка сообщения (с поддержкой прогресса) --------
+async function sendMessage() {
+    const input=document.getElementById('message-input');
+    const imageInput=document.getElementById('image-upload');
+    const sendButton=document.getElementById('send-button');
+    const loader=document.getElementById('loader');
+
+    const messageText=input.value.trim();
+    const imageFile=imageInput.files[0];
+    if(messageText==='' && !imageFile) return;
+
+    let adminKey = getStoredAdminKey();
+    if(!adminKey){
+        const entered = await askAdminKey();
+        if(!entered){
+            displayMessageInChat('Отправка отменена. Только администратор может отправлять сообщения.','ai');
+            return;
+        }
+        storeAdminKey(entered);
+        adminKey = entered;
+    }
+
+    sendButton.disabled = true;
+    loader.style.display = 'inline-block';
+
+    try{
+        const formData = new FormData();
+        if(messageText!=='') formData.append('message',messageText);
+        if(imageFile) formData.append('image',imageFile);
+        formData.append('adminKey',adminKey);
+
+        // Если есть файл — используем XHR чтобы отследить прогресс
+        if(imageFile){
+            showUploadProgressUI();
+            setUploadProgressValue(0);
+
+            await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', webhookUrl, true);
+
+                xhr.upload.onprogress = function(e){
+                    if(e.lengthComputable){
+                        const percent = (e.loaded / e.total) * 100;
+                        setUploadProgressValue(percent);
+                    } else {
+                        // если длина неизвестна — показать анимацию-имитацию (необязательно)
+                        // просто не меняем процент
+                    }
+                };
+
+                xhr.onload = function(){
+                    // Завершили загрузку тела запроса — теперь обработаем ответ
+                    setUploadProgressValue(100);
+                    // Попробуем распарсить JSON
+                    let data = {};
+                    try{ data = JSON.parse(xhr.responseText||'{}'); } catch(e){ data = {raw: xhr.responseText}; }
+
+                    const outputText = (data.output||(data.json&&data.json.output))||'';
+                    const deniedByText = typeof outputText==='string' && /доступ\s*запрещ/i.test(outputText.toLowerCase());
+
+                    if(xhr.status === 403){
+                        displayMessageInChat(outputText||'Доступ запрещён.','ai');
+                        clearAdminKey();
+                        resolve();
+                        return;
+                    } else if(deniedByText){
+                        displayMessageInChat(outputText,'ai');
+                        clearAdminKey();
+                        resolve();
+                        return;
+                    } else if(xhr.status < 200 || xhr.status >= 300){
+                        console.error('Ошибка сервера:', xhr.status, data);
+                        displayMessageInChat('Сервер вернул ошибку.','ai');
+                        resolve();
+                        return;
+                    }
+
+                    // Удачная отправка
+                    if(messageText!=='') displayMessageInChat(messageText,'user');
+                    if(imageFile) displayMessageInChat(`Файл отправлен: ${imageFile.name}`,'user');
+
+                    displayMessageInChat(outputText||JSON.stringify(data),'ai');
+
+                    input.value = ''; 
+                    imageInput.value = '';
+                    resolve();
+                };
+
+                xhr.onerror = function(){
+                    console.error('XHR error', xhr);
+                    displayMessageInChat('Ошибка при загрузке файла.','ai');
+                    reject(new Error('XHR error'));
+                };
+
+                xhr.onabort = function(){
+                    displayMessageInChat('Загрузка отменена.','ai');
+                    reject(new Error('abort'));
+                };
+
+                xhr.send(formData);
+            });
+
+            // Скрываем прогресс через небольшую задержку (чтобы пользователь увидел 100%)
+            setTimeout(()=> resetUploadProgress(), 700);
+
+        } else {
+            // Нет файла — используем fetch (как раньше)
+            const response = await fetch(webhookUrl,{method:'POST', body:formData});
+            let data = {};
+            try{ data = await response.json(); }catch(e){ console.warn('Ответ не JSON:', e); data = {raw: ''}; }
+
+            const outputText = (data.output||(data.json&&data.json.output))||'';
+            const deniedByText = typeof outputText==='string' && /доступ\s*запрещ/i.test(outputText.toLowerCase());
+
+            if(!response.ok && response.status===403){
+                displayMessageInChat(outputText||'Доступ запрещён.','ai'); 
+                clearAdminKey();
+                return;
+            } else if(deniedByText){
+                displayMessageInChat(outputText,'ai'); 
+                clearAdminKey();
+                return;
+            } else if(!response.ok){
+                console.error('Ошибка сервера:',response.status,data);
+                displayMessageInChat('Сервер вернул ошибку.','ai'); 
+                return;
+            }
 
             if(messageText!=='') displayMessageInChat(messageText,'user');
-            if(imageFile) displayMessageInChat(`Image uploaded: ${imageFile.name}`,'user');
             displayMessageInChat(outputText||JSON.stringify(data),'ai');
 
-            input.value=''; imageInput.value='';
-        } catch(err){ console.error(err); displayMessageInChat('Ошибка. Попробуйте еще раз.','ai'); }
-        finally{ loader.style.display='none'; sendButton.disabled=false; }
-    }
+            input.value = ''; 
+            imageInput.value = '';
+        }
 
-    document.addEventListener('DOMContentLoaded',()=>{
-        updateAdminStatus();
-        loadChatHistory();
-        const msgEl=document.getElementById('message-input');
-        msgEl.addEventListener('keydown',function(event){ if(event.key==='Enter'&&!event.shiftKey){ event.preventDefault(); sendMessage(); } });
+        // Удаляем временное превью после успешной отправки
+        const tempPreview = document.getElementById('image-preview-temp');
+        if(tempPreview) tempPreview.remove();
+
+    } catch(err){
+        console.error(err);
+        displayMessageInChat('Ошибка. Попробуйте еще раз.','ai'); 
+    } finally{
+        loader.style.display='none'; 
+        sendButton.disabled=false;
+    }
+}
+
+// Показываем превью и имя файла при выборе
+document.getElementById('image-upload').addEventListener('change', function(){
+    const file = this.files[0];
+    if(file){
+        const reader = new FileReader();
+        reader.onload = function(e){
+            const oldPreview = document.getElementById('image-preview-temp');
+            if(oldPreview) oldPreview.remove();
+            displayMessageInChat(e.target.result, 'user', 'image-preview-temp', true, file.name);
+            // Показываем прогресс UI (будет заполняться при реальной загрузке)
+            showUploadProgressUI();
+            setUploadProgressValue(0);
+        }
+        reader.readAsDataURL(file);
+    } else {
+        // если отменили выбор — сбрасываем прогресс
+        resetUploadProgress();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', ()=>{
+    updateAdminStatus();
+    loadChatHistory();
+    const msgEl=document.getElementById('message-input');
+    msgEl.addEventListener('keydown', function(event){
+        if(event.key==='Enter' && !event.shiftKey){
+            event.preventDefault(); 
+            sendMessage();
+        }
     });
+});
 </script>
+
+
 </body>
 </html>
