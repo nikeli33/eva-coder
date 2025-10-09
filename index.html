@@ -627,13 +627,23 @@ async function loadChatHistory() {
         const response = await fetch(historyWebhookUrl, { method:'POST' });
         if(!response.ok) throw new Error('Ошибка при загрузке истории чата.');
         const chatHistory = await response.json();
-        chatHistory.forEach(msg=>{
-            // Поддерживаем несколько структур: msg.json.message может быть объект или строка
-            const content = (msg && msg.json && (msg.json.message||msg.json.output))||'';
-            const type = (msg && msg.json && msg.json.type)||'ai';
-            displayMessageInChat(content,type);
+
+        chatHistory.forEach(msg => {
+            // Получаем контент и тип
+            const content = (msg && msg.json && (msg.json.message||msg.json.output)) || '';
+            const type = (msg && msg.json && msg.json.type) || 'ai';
+
+            // Фильтруем human-сообщения с "SCHEDULED_INITIATE_CONVERSATION"
+            if(type === 'human' && typeof content === 'string' && content.includes("SCHEDULED_INITIATE_CONVERSATION")) {
+                return; // пропускаем
+            }
+
+            displayMessageInChat(content, type);
         });
-    } catch(err){ console.error(err); displayMessageInChat('Извините, произошла ошибка при загрузке истории чата.','ai'); }
+    } catch(err){
+        console.error(err);
+        displayMessageInChat('Извините, произошла ошибка при загрузке истории чата.','ai');
+    }
 }
 
 function adminLogout() { clearAdminKey(); displayMessageInChat('Вы вышли из роли администратора.','ai'); }
