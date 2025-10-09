@@ -213,6 +213,14 @@
             text-align: center;
             animation: slideDown 0.3s ease;
         }
+
+        @media (max-width: 480px) {
+            .modal-content {
+                width: 350px; /* уменьшенная ширина */
+                padding: 15px; /* уменьшаем отступы */
+            }
+        }
+
         @keyframes slideDown { from {transform: translateY(-30px); opacity:0;} to {transform: translateY(0); opacity:1;} }
 
         .modal-content h2 { margin-bottom: 15px; font-size: 20px; color: #333; }
