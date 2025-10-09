@@ -145,6 +145,16 @@
         }
         .chat-actions button#send-button:hover { background-color: #0056b3; }
 
+        .chat-actions button#admin-logout-button {
+            padding: 6px 10px;
+            border: none;
+            background: #f0f0f0;
+            color: #333;
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
         .image-upload-label {
             cursor: pointer;
             display: flex;
@@ -169,6 +179,12 @@
             margin-left: 6px;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .admin-status {
+            margin-left: 8px;
+            font-size: 13px;
+            color: #555;
+        }
 
         /* адаптация */
         @media (max-width: 600px) {
@@ -228,7 +244,11 @@
             </label>
             <input type="file" id="image-upload" accept="image/*">
 
+            <button id="admin-logout-button" onclick="adminLogout()" title="Выйти из роли администратора">Выйти админ</button>
+
             <div class="loader" id="loader"></div>
+
+            <div class="admin-status" id="admin-status">Админ: нет</div>
         </div>
     </div>
 </div>
@@ -236,6 +256,36 @@
 <script>
     const webhookUrl = 'https://n8n.eva-dragon.ru/webhook/my-chat';
     const historyWebhookUrl = 'https://n8n.eva-dragon.ru/webhook/get-chat-history';
+
+    // ключ хранится в sessionStorage (очищается при закрытии вкладки)
+    const ADMIN_SESSION_KEY = 'eva_adminKey';
+
+    function getStoredAdminKey() {
+        return sessionStorage.getItem(ADMIN_SESSION_KEY);
+    }
+
+    function storeAdminKey(key) {
+        if (key) sessionStorage.setItem(ADMIN_SESSION_KEY, key);
+        updateAdminStatus();
+    }
+
+    function clearAdminKey() {
+        sessionStorage.removeItem(ADMIN_SESSION_KEY);
+        updateAdminStatus();
+    }
+
+    function updateAdminStatus() {
+        const statusEl = document.getElementById('admin-status');
+        const key = getStoredAdminKey();
+        statusEl.innerText = key ? 'Админ: да' : 'Админ: нет';
+    }
+
+    // спрашиваем ключ через prompt (можно заменить на модальное окно)
+    function askAdminKey() {
+        const key = prompt('Введите пароль администратора (требуется для отправки сообщений):');
+        if (!key) return null;
+        return key;
+    }
 
     function displayMessageInChat(text, type) {
         const messagesContainer = document.getElementById('chat-messages');
@@ -253,9 +303,10 @@
         const bubbleDiv = document.createElement('div');
         bubbleDiv.className = 'bubble';
         if (type === 'ai') {
-            const parsedText = marked.parse(text);
+            const parsedText = marked.parse(text || '');
             bubbleDiv.innerHTML = parsedText;
 
+            // добавить кнопки копирования для block кода
             const codeBlocks = bubbleDiv.querySelectorAll('pre code');
             codeBlocks.forEach(codeBlock => {
                 const preElement = codeBlock.parentElement;
@@ -292,7 +343,6 @@
                 throw new Error('Ошибка при загрузке истории чата.');
             }
             const chatHistory = await response.json();
-            // предположительно msg.json.message + msg.json.type (как было в твоём бэке)
             chatHistory.forEach(msg => {
                 const content = (msg && msg.json && (msg.json.message || msg.json.output)) || '';
                 const type = (msg && msg.json && msg.json.type) || 'ai';
@@ -304,57 +354,108 @@
         }
     }
 
+    // Очистка admin key (выход)
+    function adminLogout() {
+        clearAdminKey();
+        displayMessageInChat('Вы вышли из роли администратора.', 'ai');
+    }
+
     async function sendMessage() {
         const inputElement = document.getElementById('message-input');
         const imageInput = document.getElementById('image-upload');
+        const sendButton = document.getElementById('send-button');
+        const loader = document.getElementById('loader');
+
         const messageText = inputElement.value.trim();
         const imageFile = imageInput.files[0];
 
         if (messageText === '' && !imageFile) return;
 
-        if (messageText !== '') {
-            displayMessageInChat(messageText, 'user');
-        }
-        if (imageFile) {
-            displayMessageInChat(`Image uploaded: ${imageFile.name}`, 'user');
+        // Получаем ключ администратора из sessionStorage или спрашиваем
+        let adminKey = getStoredAdminKey();
+        if (!adminKey) {
+            const entered = askAdminKey();
+            if (!entered) {
+                displayMessageInChat('Отправка отменена. Только администратор может отправлять сообщения.', 'ai');
+                return;
+            }
+            storeAdminKey(entered);
+            adminKey = entered;
         }
 
-        // очищаем поля визуально (сохранили показ отправки выше)
-        inputElement.value = '';
-        imageInput.value = '';
-
-        const loader = document.getElementById('loader');
+        // Блокируем кнопку и показываем лоадер
+        sendButton.disabled = true;
         loader.style.display = 'inline-block';
 
         try {
             const formData = new FormData();
             if (messageText !== '') formData.append('message', messageText);
             if (imageFile) formData.append('image', imageFile);
+            formData.append('adminKey', adminKey);
 
             const response = await fetch(webhookUrl, {
                 method: 'POST',
                 body: formData,
             });
 
-            if (!response.ok) {
-                throw new Error('Ошибка при получении ответа от n8n.');
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (e) {
+                // если ответ не JSON — оставляем data пустым
+                console.warn('Ответ не в JSON формате:', e);
             }
 
-            const data = await response.json();
-            // ожидаем поле output (как в твоём коде)
-            const aiResponseText = data.output || (data.json && data.json.output) || JSON.stringify(data);
+            // Варианты отказа: статус 403 или текст ответа содержит "доступ запрещ"
+            const outputText = (data && (data.output || (data.json && data.json.output))) || '';
+
+            const deniedByText = typeof outputText === 'string' && /доступ\s*запрещ/i.test(outputText.toLowerCase());
+            if (!response.ok && response.status === 403) {
+                // явный отказ
+                displayMessageInChat(outputText || 'Доступ запрещён. Только администратор может писать в чат.', 'ai');
+                clearAdminKey(); // очистим локальный ключ, т.к. он неверный
+                return;
+            } else if (deniedByText) {
+                // отказ через сообщение
+                displayMessageInChat(outputText, 'ai');
+                clearAdminKey();
+                return;
+            } else if (!response.ok) {
+                // другая ошибка сервера
+                console.error('Ошибка от сервера:', response.status, data);
+                displayMessageInChat('Сервер вернул ошибку. Попробуйте позже.', 'ai');
+                return;
+            }
+
+            // Успешно — показываем сообщение пользователя и ответ ИИ
+            if (messageText !== '') {
+                displayMessageInChat(messageText, 'user');
+            }
+            if (imageFile) {
+                displayMessageInChat(`Image uploaded: ${imageFile.name}`, 'user');
+            }
+
+            // Показываем ответ от n8n/агента
+            const aiResponseText = outputText || JSON.stringify(data);
             displayMessageInChat(aiResponseText, 'ai');
+
+            // Очистим поле ввода и файл
+            inputElement.value = '';
+            imageInput.value = '';
 
         } catch (error) {
             console.error('Ошибка:', error);
             displayMessageInChat('Извините, произошла ошибка. Пожалуйста, попробуйте еще раз.', 'ai');
         } finally {
             loader.style.display = 'none';
+            sendButton.disabled = false;
         }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        updateAdminStatus();
         loadChatHistory();
+
         // Enter отправляет, Shift+Enter — новая строка
         const msgEl = document.getElementById('message-input');
         msgEl.addEventListener('keydown', function(event) {
@@ -367,4 +468,3 @@
 </script>
 </body>
 </html>
-
