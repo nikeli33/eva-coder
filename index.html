@@ -1,474 +1,430 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <title>Eva - AI-программист</title>
-  <link rel="icon" href="assets/icon.ico" type="image/x-icon" />
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #f0f2f5;
-      margin: 0;
-      padding: 20px;
-      background-image: url("assets/background.png");
-      background-size: cover;
-      background-attachment: fixed;
-      background-position: center;
-    }
-
-    #bg-video {
-      position: fixed;
-      right: 0;
-      bottom: 0;
-      min-width: 100%;
-      min-height: 100%;
-      width: auto;
-      height: auto;
-      z-index: -100;
-      background-size: cover;
-      opacity: 0.1;
-    }
-
-    .chat-container {
-      max-width: 900px;
-      margin: auto;
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-      display: flex;
-      flex-direction: column;
-      height: 90vh;
-      background-color: rgba(255, 255, 255, 0.98);
-    }
-
-    .chat-messages {
-      flex-grow: 1;
-      padding: 20px;
-      overflow-y: auto;
-      border-bottom: 1px solid #eee;
-    }
-
-    .message {
-      margin-bottom: 15px;
-      display: flex;
-      align-items: flex-end;
-    }
-
-    .user-message,
-    .human-message {
-      justify-content: flex-end;
-    }
-
-    .ai-message {
-      justify-content: flex-start;
-    }
-
-    .avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      margin-right: 10px;
-      object-fit: cover;
-    }
-
-    .ai-message .avatar {
-      order: -1;
-    }
-
-    .user-message .avatar,
-    .human-message .avatar {
-      margin-left: 10px;
-      margin-right: 0;
-    }
-
-    .user-message .bubble,
-    .human-message .bubble {
-      background-color: #007bff;
-      color: white;
-      border-radius: 20px 20px 5px 20px;
-      padding: 10px 15px;
-      max-width: 70%;
-    }
-
-    .ai-message .bubble {
-      background-color: #e9e9eb;
-      color: #333;
-      border-radius: 20px 20px 20px 5px;
-      padding: 10px 15px;
-      max-width: 70%;
-    }
-
-    /* ---- Кодовые блоки ---- */
-    .ai-message .bubble pre {
-      position: relative;
-    }
-    .ai-message .bubble pre code {
-      background-color: #333;
-      color: #f8f8f2;
-      border-radius: 5px;
-      padding: 10px;
-      display: block;
-      overflow-x: auto;
-      box-sizing: border-box;
-    }
-    .copy-button {
-      position: absolute;
-      top: 5px;
-      right: 5px;
-      background-color: rgba(255, 255, 255, 0.2);
-      color: white;
-      border: none;
-      padding: 5px 10px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 12px;
-      opacity: 0;
-      transition: opacity 0.2s ease-in-out;
-      z-index: 10;
-    }
-    .ai-message .bubble pre:hover .copy-button {
-      opacity: 1;
-    }
-
-    /* ---------- Ввод ---------- */
-    .chat-input {
-      display: flex;
-      flex-direction: column;
-      padding: 15px;
-      border-top: 1px solid #eee;
-      background: rgba(255, 255, 255, 0.98);
-      gap: 10px;
-    }
-
-    .chat-input textarea {
-      width: 100%;
-      min-height: 48px;
-      max-height: 160px;
-      resize: vertical;
-      padding: 10px 14px;
-      font-size: 16px;
-      border-radius: 20px;
-      border: 1px solid #ccc;
-      outline: none;
-      box-sizing: border-box;
-      transition: border-color 0.2s;
-    }
-    .chat-input textarea:focus {
-      border-color: #007bff;
-    }
-
-    .chat-actions {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      justify-content: flex-start;
-      flex-wrap: wrap;
-    }
-
-    .chat-actions button#send-button {
-      padding: 10px 18px;
-      border: none;
-      background-color: #007bff;
-      color: white;
-      border-radius: 20px;
-      cursor: pointer;
-      transition: background-color 0.3s;
-      flex-shrink: 0;
-    }
-
-    .chat-actions button#send-button:hover {
-      background-color: #0056b3;
-    }
-
-    .chat-actions button#admin-logout-button {
-      padding: 6px 10px;
-      border: none;
-      background: #f0f0f0;
-      color: #333;
-      border-radius: 14px;
-      cursor: pointer;
-      font-size: 14px;
-    }
-
-    .image-upload-label {
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      padding: 6px 10px;
-      border-radius: 14px;
-      background: #f5f7fa;
-      border: 1px solid #e0e6ee;
-    }
-
-    #image-upload {
-      display: none;
-    }
-
-    .loader {
-      width: 20px;
-      height: 20px;
-      border: 3px solid #f3f3f3;
-      border-top: 3px solid #007bff;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      display: none;
-      margin-left: 6px;
-    }
-
-    @keyframes spin {
-      0% {
-        transform: rotate(0deg);
-      }
-      100% {
-        transform: rotate(360deg);
-      }
-    }
-
-    .admin-status {
-      margin-left: 8px;
-      font-size: 13px;
-      color: #555;
-    }
-
-    /* ---------- Модальное окно ---------- */
-    #admin-modal {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.5);
-      display: none;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-
-    #admin-modal.active {
-      display: flex;
-    }
-
-    .modal-content {
-      background: #fff;
-      padding: 25px 30px;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-      text-align: center;
-      width: 90%;
-      max-width: 400px;
-    }
-
-    .modal-content h2 {
-      margin-bottom: 15px;
-    }
-
-    .modal-content input {
-      width: 100%;
-      padding: 10px;
-      font-size: 16px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      margin-bottom: 15px;
-    }
-
-    .modal-content button {
-      padding: 10px 16px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      background-color: #007bff;
-      color: white;
-      font-size: 15px;
-    }
-
-    .modal-content button:hover {
-      background-color: #0056b3;
-    }
-
-    @media (max-width: 600px) {
-      .chat-input {
-        padding: 12px;
-      }
-    }
-  </style>
-</head>
-<body>
-  <video autoplay muted loop playsinline id="bg-video">
-    <source src="assets/background2.mp4" type="video/mp4" />
-  </video>
-
-  <div class="chat-container">
-    <div class="chat-messages" id="chat-messages"></div>
-
-    <div class="chat-input">
-      <textarea id="message-input" placeholder="Введите ваше сообщение..."></textarea>
-
-      <div class="chat-actions">
-        <button id="send-button" onclick="sendMessage()">Отправить</button>
-        <label for="image-upload" class="image-upload-label" title="Прикрепить изображение">📎</label>
-        <input type="file" id="image-upload" accept="image/*" />
-        <button id="admin-logout-button" onclick="adminLogout()">Выйти админ</button>
-        <div class="loader" id="loader"></div>
-        <div class="admin-status" id="admin-status">Админ: нет</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 🔐 Модальное окно ввода пароля -->
-  <div id="admin-modal">
-    <div class="modal-content">
-      <h2>Вход администратора</h2>
-      <input type="password" id="admin-password" placeholder="Введите пароль" />
-      <button onclick="submitAdminKey()">Войти</button>
-    </div>
-  </div>
-
-  <script>
-    const webhookUrl = "https://n8n.eva-dragon.ru/webhook/my-chat";
-    const historyWebhookUrl = "https://n8n.eva-dragon.ru/webhook/get-chat-history";
-    const ADMIN_SESSION_KEY = "eva_adminKey";
-
-    function getStoredAdminKey() {
-      return sessionStorage.getItem(ADMIN_SESSION_KEY);
-    }
-    function storeAdminKey(key) {
-      if (key) sessionStorage.setItem(ADMIN_SESSION_KEY, key);
-      updateAdminStatus();
-    }
-    function clearAdminKey() {
-      sessionStorage.removeItem(ADMIN_SESSION_KEY);
-      updateAdminStatus();
-    }
-    function updateAdminStatus() {
-      document.getElementById("admin-status").innerText = getStoredAdminKey()
-        ? "Админ: да"
-        : "Админ: нет";
-    }
-
-    // --- Модальное окно ---
-    function askAdminKey() {
-      document.getElementById("admin-modal").classList.add("active");
-      return new Promise((resolve) => {
-        window._resolveAdminKey = resolve;
-      });
-    }
-
-    function submitAdminKey() {
-      const key = document.getElementById("admin-password").value.trim();
-      document.getElementById("admin-password").value = "";
-      document.getElementById("admin-modal").classList.remove("active");
-      if (window._resolveAdminKey) window._resolveAdminKey(key || null);
-    }
-
-    // --- Отправка сообщений ---
-    function displayMessageInChat(text, type) {
-      const messagesContainer = document.getElementById("chat-messages");
-      const messageDiv = document.createElement("div");
-      messageDiv.className = `message ${type}-message`;
-
-      if (type === "ai") {
-        const avatarImg = document.createElement("img");
-        avatarImg.className = "avatar";
-        avatarImg.src = "assets/eva.jpg";
-        messageDiv.appendChild(avatarImg);
-      }
-
-      const bubbleDiv = document.createElement("div");
-      bubbleDiv.className = "bubble";
-
-      if (type === "ai") {
-        const parsedText = marked.parse(text || "");
-        bubbleDiv.innerHTML = parsedText;
-      } else {
-        bubbleDiv.innerText = text;
-      }
-
-      messageDiv.appendChild(bubbleDiv);
-      messagesContainer.appendChild(messageDiv);
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-
-    async function sendMessage() {
-      const input = document.getElementById("message-input");
-      const imageInput = document.getElementById("image-upload");
-      const loader = document.getElementById("loader");
-      const btn = document.getElementById("send-button");
-
-      const text = input.value.trim();
-      const img = imageInput.files[0];
-      if (!text && !img) return;
-
-      let adminKey = getStoredAdminKey();
-      if (!adminKey) adminKey = await askAdminKey();
-      if (!adminKey) {
-        displayMessageInChat("Отправка отменена. Только администратор может писать.", "ai");
-        return;
-      }
-
-      storeAdminKey(adminKey);
-      btn.disabled = true;
-      loader.style.display = "inline-block";
-
-      try {
-        const formData = new FormData();
-        if (text) formData.append("message", text);
-        if (img) formData.append("image", img);
-        formData.append("adminKey", adminKey);
-
-        const res = await fetch(webhookUrl, { method: "POST", body: formData });
-        const data = await res.json().catch(() => ({}));
-        const output = data.output || data?.json?.output || "";
-
-        if (!res.ok || /доступ\s*запрещ/i.test(output.toLowerCase())) {
-          displayMessageInChat(output || "Доступ запрещён.", "ai");
-          clearAdminKey();
-          return;
+    <meta charset="UTF-8">
+    <title>Eva - AI-программист</title>
+    <link rel="icon" href="assets/icon.ico" type="image/x-icon">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            background-image: url('assets/background.png');
+            background-size: cover;
+            background-attachment: fixed;
+            background-position: center;
         }
 
-        displayMessageInChat(text, "user");
-        if (img) displayMessageInChat(`Изображение: ${img.name}`, "user");
-        displayMessageInChat(output, "ai");
-        input.value = "";
-        imageInput.value = "";
-      } catch (e) {
-        console.error(e);
-        displayMessageInChat("Ошибка при отправке сообщения.", "ai");
-      } finally {
-        loader.style.display = "none";
-        btn.disabled = false;
-      }
+        #bg-video {
+            position: fixed;
+            right: 0;
+            bottom: 0;
+            min-width: 100%;
+            min-height: 100%;
+            width: auto;
+            height: auto;
+            z-index: -100;
+            background-size: cover;
+            opacity: 0.1;
+        }
+
+        .chat-container {
+            max-width: 900px;
+            margin: auto;
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            height: 90vh;
+        }
+        .chat-messages { flex-grow: 1; padding: 20px; overflow-y: auto; border-bottom: 1px solid #eee; }
+        .message { margin-bottom: 15px; display: flex; align-items: flex-end; }
+        .user-message, .human-message { justify-content: flex-end; }
+        .ai-message { justify-content: flex-start; }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 10px;
+            object-fit: cover;
+        }
+        .ai-message .avatar { order: -1; }
+        .user-message .avatar, .human-message .avatar { margin-left: 10px; margin-right: 0; }
+
+        .user-message .bubble, .human-message .bubble { background-color: #007bff; color: white; border-radius: 20px 20px 5px 20px; padding: 10px 15px; max-width: 70%; }
+        .ai-message .bubble { background-color: #e9e9eb; color: #333; border-radius: 20px 20px 20px 5px; padding: 10px 15px; max-width: 70%; }
+
+        .ai-message .bubble pre { position: relative; }
+        .ai-message .bubble pre code {
+            background-color: #333;
+            color: #f8f8f2;
+            border-radius: 5px;
+            padding: 10px;
+            display: block;
+            overflow-x: auto;
+            box-sizing: border-box;
+        }
+        .copy-button {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+            z-index: 10;
+        }
+        .ai-message .bubble pre:hover .copy-button { opacity: 1; }
+        .copy-button:hover { background-color: rgba(255, 255, 255, 0.4); }
+
+        .chat-input {
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            border-top: 1px solid #eee;
+            background: rgba(255,255,255,0.98);
+            gap: 10px;
+        }
+        .chat-input textarea {
+            width: 100%;
+            min-height: 48px;
+            max-height: 160px;
+            resize: vertical;
+            padding: 10px 14px;
+            font-size: 16px;
+            border-radius: 20px;
+            border: 1px solid #ccc;
+            outline: none;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        .chat-input textarea:focus { border-color: #007bff; }
+
+        .chat-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: flex-start;
+            flex-wrap: wrap;
+        }
+        .chat-actions button#send-button {
+            padding: 10px 18px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            flex-shrink: 0;
+        }
+        .chat-actions button#send-button:hover { background-color: #0056b3; }
+
+        .chat-actions button#admin-logout-button {
+            padding: 6px 10px;
+            border: none;
+            background: #f0f0f0;
+            color: #333;
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .image-upload-label {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            padding: 6px 10px;
+            border-radius: 14px;
+            background: #f5f7fa;
+            border: 1px solid #e0e6ee;
+        }
+        .image-upload-label svg { display: block; width: 20px; height: 20px; fill: #007bff; }
+        #image-upload { display: none; }
+
+        .loader {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: none;
+            margin-left: 6px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .admin-status {
+            margin-left: 8px;
+            font-size: 13px;
+            color: #555;
+        }
+
+        @media (max-width: 600px) {
+            .chat-input { padding: 12px; gap: 8px; }
+            .chat-actions { gap: 8px; }
+            .chat-actions button#send-button { flex: 1 1 auto; min-width: 120px; }
+            .image-upload-label { flex: 0 0 auto; }
+        }
+        @media (max-width: 600px) {
+          .message.ai-message,
+          .message.user-message,
+          .message.human-message {
+            flex-direction: column-reverse;
+            align-items: flex-start;
+          }
+          .message .avatar { margin: 6px 0 0 0; width: 28px; height: 28px; }
+          .ai-message .bubble,
+          .user-message .bubble,
+          .human-message .bubble { max-width: 100%; }
+        }
+
+        /* ---------- Модальное окно для пароля ---------- */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from {opacity:0;} to {opacity:1;} }
+
+        .modal-content {
+            background-color: #fff;
+            margin: 10% auto;
+            padding: 25px;
+            border-radius: 16px;
+            width: 420px;
+            max-width: 90%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            text-align: center;
+            animation: slideDown 0.3s ease;
+        }
+        @keyframes slideDown { from {transform: translateY(-30px); opacity:0;} to {transform: translateY(0); opacity:1;} }
+
+        .modal-content h2 { margin-bottom: 15px; font-size: 20px; color: #333; }
+        .modal-content input {
+            width: 92%;
+            padding: 10px 14px;
+            font-size: 16px;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+            outline: none;
+            margin-bottom: 20px;
+            transition: border-color 0.2s;
+        }
+        .modal-content input:focus { border-color: #007bff; }
+        .modal-actions {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .modal-actions button {
+            flex: 1;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        #admin-submit-btn { background-color: #007bff; color: #fff; }
+        #admin-submit-btn:hover { background-color: #0056b3; }
+        #admin-cancel-btn { background-color: #f0f0f0; color: #333; }
+        #admin-cancel-btn:hover { background-color: #dcdcdc; }
+    </style>
+</head>
+<body>
+
+<video autoplay muted loop playsinline id="bg-video">
+    <source src="assets/background2.mp4" type="video/mp4">
+</video>
+
+<div class="chat-container">
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-input">
+        <textarea id="message-input" placeholder="Введите ваше сообщение..."></textarea>
+        <div class="chat-actions">
+            <button id="send-button" onclick="sendMessage()">Отправить</button>
+            <label for="image-upload" class="image-upload-label" title="Прикрепить изображение">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+                    <path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/>
+                    <path d="M11 5.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5z"/>
+                    <path d="M12.5 14a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5z"/>
+                    <path d="M4.5 10.5a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5z"/>
+                    <path d="M12.016 1.13a.5.5 0 0 1 .555.103l2.85 2.85a.5.5 0 0 1 .103.556l-9.155 9.155a.5.5 0 0 1-.16.104l-2.614.653a.5.5 0 0 1-.64-.64l.653-2.614a.5.5 0 0 1 .104-.16z"/>
+                </svg>
+            </label>
+            <input type="file" id="image-upload" accept="image/*">
+            <button id="admin-logout-button" onclick="adminLogout()" title="Выйти из роли администратора">Выйти админ</button>
+            <div class="loader" id="loader"></div>
+            <div class="admin-status" id="admin-status">Админ: нет</div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно -->
+<div id="admin-modal" class="modal">
+    <div class="modal-content">
+        <h2>Вход администратора</h2>
+        <input type="password" id="admin-key-input" placeholder="Введите пароль">
+        <div class="modal-actions">
+            <button id="admin-submit-btn">Войти</button>
+            <button id="admin-cancel-btn">Отмена</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const webhookUrl = 'https://n8n.eva-dragon.ru/webhook/my-chat';
+    const historyWebhookUrl = 'https://n8n.eva-dragon.ru/webhook/get-chat-history';
+    const ADMIN_SESSION_KEY = 'eva_adminKey';
+
+    function getStoredAdminKey() { return sessionStorage.getItem(ADMIN_SESSION_KEY); }
+    function storeAdminKey(key) { if(key) sessionStorage.setItem(ADMIN_SESSION_KEY, key); updateAdminStatus(); }
+    function clearAdminKey() { sessionStorage.removeItem(ADMIN_SESSION_KEY); updateAdminStatus(); }
+    function updateAdminStatus() { document.getElementById('admin-status').innerText = getStoredAdminKey() ? 'Админ: да' : 'Админ: нет'; }
+
+    // Кастомный ввод пароля через модальное окно
+    function askAdminKey() {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('admin-modal');
+            const input = document.getElementById('admin-key-input');
+            const submitBtn = document.getElementById('admin-submit-btn');
+            const cancelBtn = document.getElementById('admin-cancel-btn');
+
+            modal.style.display = 'block';
+            input.value = '';
+            input.focus();
+
+            function cleanup() {
+                modal.style.display = 'none';
+                submitBtn.removeEventListener('click', onSubmit);
+                cancelBtn.removeEventListener('click', onCancel);
+                input.removeEventListener('keydown', onEnter);
+            }
+
+            function onSubmit() { cleanup(); resolve(input.value.trim() || null); }
+            function onCancel() { cleanup(); resolve(null); }
+            function onEnter(event) { if(event.key==='Enter') onSubmit(); }
+
+            submitBtn.addEventListener('click', onSubmit);
+            cancelBtn.addEventListener('click', onCancel);
+            input.addEventListener('keydown', onEnter);
+        });
     }
 
-    function adminLogout() {
-      clearAdminKey();
-      displayMessageInChat("Вы вышли из роли администратора.", "ai");
+    function displayMessageInChat(text, type) {
+        const messagesContainer = document.getElementById('chat-messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}-message`;
+
+        if(type==='ai'){
+            const avatarImg=document.createElement('img');
+            avatarImg.className='avatar';
+            avatarImg.src='assets/eva.jpg';
+            avatarImg.alt='AI Avatar';
+            messageDiv.appendChild(avatarImg);
+        }
+
+        const bubbleDiv=document.createElement('div');
+        bubbleDiv.className='bubble';
+        if(type==='ai'){
+            bubbleDiv.innerHTML=marked.parse(text||'');
+            bubbleDiv.querySelectorAll('pre code').forEach(codeBlock=>{
+                const pre=codeBlock.parentElement;
+                const btn=document.createElement('button');
+                btn.innerText='Copy';
+                btn.className='copy-button';
+                btn.addEventListener('click',()=>{navigator.clipboard.writeText(codeBlock.innerText).then(()=>{btn.innerText='Copied!'; setTimeout(()=>{btn.innerText='Copy';},2000);});});
+                pre.appendChild(btn);
+            });
+        } else { bubbleDiv.innerText=text; }
+        messageDiv.appendChild(bubbleDiv);
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop=messagesContainer.scrollHeight;
     }
 
     async function loadChatHistory() {
-      try {
-        const res = await fetch(historyWebhookUrl, { method: "POST" });
-        const history = await res.json();
-        history.forEach((m) => {
-          const content = m?.json?.message || m?.json?.output || "";
-          const type = m?.json?.type || "ai";
-          displayMessageInChat(content, type);
-        });
-      } catch (e) {
-        displayMessageInChat("Не удалось загрузить историю.", "ai");
-      }
+        try {
+            const response=await fetch(historyWebhookUrl,{method:'POST'});
+            if(!response.ok) throw new Error('Ошибка при загрузке истории чата.');
+            const chatHistory=await response.json();
+            chatHistory.forEach(msg=>{
+                const content=(msg && msg.json && (msg.json.message||msg.json.output))||'';
+                const type=(msg && msg.json && msg.json.type)||'ai';
+                displayMessageInChat(content,type);
+            });
+        } catch(err){ console.error(err); displayMessageInChat('Извините, произошла ошибка при загрузке истории чата.','ai'); }
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
-      updateAdminStatus();
-      loadChatHistory();
-      document
-        .getElementById("message-input")
-        .addEventListener("keydown", (e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-          }
-        });
+    function adminLogout() { clearAdminKey(); displayMessageInChat('Вы вышли из роли администратора.','ai'); }
+
+    async function sendMessage() {
+        const input=document.getElementById('message-input');
+        const imageInput=document.getElementById('image-upload');
+        const sendButton=document.getElementById('send-button');
+        const loader=document.getElementById('loader');
+
+        const messageText=input.value.trim();
+        const imageFile=imageInput.files[0];
+        if(messageText===''&&!imageFile) return;
+
+        let adminKey=getStoredAdminKey();
+        if(!adminKey){
+            const entered=await askAdminKey();
+            if(!entered){ displayMessageInChat('Отправка отменена. Только администратор может отправлять сообщения.','ai'); return; }
+            storeAdminKey(entered);
+            adminKey=entered;
+        }
+
+        sendButton.disabled=true;
+        loader.style.display='inline-block';
+
+        try{
+            const formData=new FormData();
+            if(messageText!=='') formData.append('message',messageText);
+            if(imageFile) formData.append('image',imageFile);
+            formData.append('adminKey',adminKey);
+
+            const response=await fetch(webhookUrl,{method:'POST', body:formData});
+            let data={};
+            try{ data=await response.json(); }catch(e){ console.warn('Ответ не JSON:',e); }
+
+            const outputText=(data.output||(data.json&&data.json.output))||'';
+            const deniedByText=typeof outputText==='string'&&/доступ\s*запрещ/i.test(outputText.toLowerCase());
+            if(!response.ok && response.status===403){ displayMessageInChat(outputText||'Доступ запрещён.','ai'); clearAdminKey(); return; }
+            else if(deniedByText){ displayMessageInChat(outputText,'ai'); clearAdminKey(); return; }
+            else if(!response.ok){ console.error('Ошибка сервера:',response.status,data); displayMessageInChat('Сервер вернул ошибку.','ai'); return; }
+
+            if(messageText!=='') displayMessageInChat(messageText,'user');
+            if(imageFile) displayMessageInChat(`Image uploaded: ${imageFile.name}`,'user');
+            displayMessageInChat(outputText||JSON.stringify(data),'ai');
+
+            input.value=''; imageInput.value='';
+        } catch(err){ console.error(err); displayMessageInChat('Ошибка. Попробуйте еще раз.','ai'); }
+        finally{ loader.style.display='none'; sendButton.disabled=false; }
+    }
+
+    document.addEventListener('DOMContentLoaded',()=>{
+        updateAdminStatus();
+        loadChatHistory();
+        const msgEl=document.getElementById('message-input');
+        msgEl.addEventListener('keydown',function(event){ if(event.key==='Enter'&&!event.shiftKey){ event.preventDefault(); sendMessage(); } });
     });
-  </script>
+</script>
 </body>
 </html>
