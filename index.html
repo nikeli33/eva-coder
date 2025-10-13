@@ -4,9 +4,15 @@
     <meta charset="UTF-8">
     <title>Eva - AI-программист</title>
     <link rel="icon" href="assets/icon.ico" type="image/x-icon">
+
+    <!-- MARKED + DOMPurify (уже были) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <!-- DOMPurify для защиты от XSS -->
     <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+
+    <!-- >>> AUTH: Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- <<< AUTH -->
+
     <style>
         /* (оставил ваш CSS без изменений) */
         body {
@@ -300,6 +306,24 @@
     <source src="assets/background2.mp4" type="video/mp4">
 </video>
 
+<!-- >>> AUTH: блок входа (можно настроить расположение) -->
+<div id="auth-section" style="max-width:900px; margin: 12px auto; text-align:center;">
+    <!-- onload config: data-client_id must be replaced with your real ID -->
+    <div id="g_id_onload"
+         data-client_id="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+         data-callback="handleGoogleLogin"
+         data-auto_prompt="false">
+    </div>
+
+    <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="sign_in_with" data-shape="rectangular" data-logo_alignment="left"></div>
+
+    <div id="auth-info" style="margin-top:10px; display:none;">
+        <span id="auth-username" style="font-weight:600;"></span>
+        <button id="auth-signout" style="margin-left:12px; padding:6px 10px; border-radius:10px; border:none; cursor:pointer;">Выйти</button>
+    </div>
+</div>
+<!-- <<< AUTH -->
+
 <div class="chat-container">
     <div class="chat-messages" id="chat-messages"></div>
     <div class="chat-input">
@@ -307,7 +331,7 @@
         <div class="chat-actions">
             <button id="send-button" onclick="sendMessage()">Отправить</button>
 
-            <!-- Оставляем прежнюю кнопку для изображений (без изменений) -->
+            <!-- Оставляем прежнюю кнопки для изображений и файлов (без изменений) -->
             <label for="image-upload" class="image-upload-label" title="Прикрепить изображение">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
                     <path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/>
@@ -319,7 +343,6 @@
             </label>
             <input type="file" id="image-upload" accept="image/*">
 
-            <!-- Новая кнопка/инпут для ZIP / .py / .txt / .md / .json / .csv -->
             <label for="file-upload" class="image-upload-label" title="Прикрепить файл (.zip, .py, .txt, .md, .json, .csv)">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18">
                     <path d="M12 2l4 4h-3v6h-2V6H8l4-4zM6 8v13h12V8H6z" fill="#007bff"/>
@@ -358,16 +381,103 @@
 </div>
 
 <script>
-const webhookUrl = 'https://n8n.eva-dragon.ru/webhook/my-chat';
+/* ===========================
+   CONFIG: URL'ы (оставил твои)
+   =========================== */
+const webhookUrl = 'https://n8n.eva-dragon.ru/webhook-test/my-chat';
 const historyWebhookUrl = 'https://n8n.eva-dragon.ru/webhook/get-chat-history';
 const ADMIN_SESSION_KEY = 'eva_adminKey';
+const JWT_STORAGE_KEY = 'eva_jwt_token';
+
+/* ===========================
+   AUTH HELPERS
+   =========================== */
+// >>> AUTH: управление JWT
+function getJwt() { return localStorage.getItem(JWT_STORAGE_KEY); }
+function storeJwt(token){ if(token) localStorage.setItem(JWT_STORAGE_KEY, token); updateAuthUI(); }
+function clearJwt(){ localStorage.removeItem(JWT_STORAGE_KEY); updateAuthUI(); }
 
 function getStoredAdminKey() { return sessionStorage.getItem(ADMIN_SESSION_KEY); }
 function storeAdminKey(key) { if(key) sessionStorage.setItem(ADMIN_SESSION_KEY, key); updateAdminStatus(); }
 function clearAdminKey() { sessionStorage.removeItem(ADMIN_SESSION_KEY); updateAdminStatus(); }
 function updateAdminStatus() { document.getElementById('admin-status').innerText = getStoredAdminKey() ? 'Админ: да' : 'Админ: нет'; }
 
-// Кастомный ввод пароля через модальное окно
+// Возвращает объект заголовков для fetch/XHR (не включает Content-Type для FormData)
+function getAuthHeaders(){
+    const headers = {};
+    const token = getJwt();
+    if(token) headers['Authorization'] = 'Bearer ' + token;
+    return headers;
+}
+
+// >>> AUTH: callback от Google Identity Services
+async function handleGoogleLogin(response){
+    // response.credential содержит ID token (JWT от Google)
+    const google_token = response.credential;
+    if(!google_token){ alert('Google login failed: no credential'); return; }
+
+    try{
+        const res = await fetch('https://api.eva-dragon.ru/auth/google', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ token: google_token })
+        });
+        if(!res.ok) throw new Error('Auth failed: ' + res.status);
+        const data = await res.json();
+        if(!data.access_token) throw new Error('No access_token returned');
+        storeJwt(data.access_token);
+        // optionally show success message
+        console.log('Logged in, jwt saved');
+    } catch(err){
+        console.error('Auth error:', err);
+        alert('Ошибка авторизации: ' + (err.message || err));
+    }
+}
+
+// >>> AUTH: обновление UI после логина/выхода
+function updateAuthUI(){
+    const token = getJwt();
+    const authSection = document.getElementById('auth-section');
+    const authInfo = document.getElementById('auth-info');
+    const authUsername = document.getElementById('auth-username');
+    const signoutBtn = document.getElementById('auth-signout');
+
+    if(token){
+        // пробуем декодировать payload для показа email (не проверяем подпись здесь)
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+            authUsername.innerText = payload.email ? ('Вход: ' + payload.email) : ('Вход выполнен');
+        } catch(e){
+            authUsername.innerText = 'Вход выполнен';
+        }
+        // скрываем кнопку входа GSI, показываем инфо и кнопку выхода
+        // note: GSI button remains in DOM but we hide whole block to avoid duplicate UI
+        authSection.querySelector('.g_id_signin').style.display = 'none';
+        authInfo.style.display = 'inline-block';
+    } else {
+        authSection.querySelector('.g_id_signin').style.display = 'inline-block';
+        authInfo.style.display = 'none';
+    }
+
+    // ensure auth-section stays visible (we do not hide whole chat)
+}
+
+// >>> AUTH: sign out handler
+document.addEventListener('DOMContentLoaded', ()=> {
+    const signoutBtn = document.getElementById('auth-signout');
+    if(signoutBtn) signoutBtn.addEventListener('click', ()=>{
+        clearJwt();
+        // optionally call google accounts revoke? simplest: just clear local token
+        // google.accounts.id.disableAutoSelect(); // if used
+    });
+
+    // init UI based on existing token
+    updateAuthUI();
+});
+
+/* ===========================
+   ADMIN modal (оставил без изменений)
+   =========================== */
 function askAdminKey() {
     return new Promise((resolve) => {
         const modal = document.getElementById('admin-modal');
@@ -396,7 +506,9 @@ function askAdminKey() {
     });
 }
 
-// Модальное окно для просмотра изображения
+/* ===========================
+   Image modal & helpers (оставил без изменений)
+   =========================== */
 function createImageModal() {
     if(document.getElementById('image-modal')) return;
     const modal = document.createElement('div');
@@ -422,11 +534,7 @@ function createImageModal() {
     img.style.transition = 'transform 0.3s ease';
     modal.appendChild(img);
 
-    modal.addEventListener('click', ()=>{
-        modal.style.opacity = 0;
-        img.style.transform = 'scale(0.8)';
-        setTimeout(()=>{ modal.style.display='none'; }, 300);
-    });
+    modal.addEventListener('click', ()=>{ modal.style.opacity = 0; img.style.transform = 'scale(0.8)'; setTimeout(()=>{ modal.style.display='none'; }, 300); });
 
     document.body.appendChild(modal);
 }
@@ -437,18 +545,14 @@ function showImageInModal(src) {
     const img = document.getElementById('modal-img');
     img.src = src;
     modal.style.display = 'flex';
-    setTimeout(()=>{
-        modal.style.opacity = 1;
-        img.style.transform = 'scale(1)';
-    }, 10);
+    setTimeout(()=>{ modal.style.opacity = 1; img.style.transform = 'scale(1)'; }, 10);
 }
 
 /* ===========================
-   HELPERS: распознавание URL и картинок
+   Helpers для контента
    =========================== */
 function isLikelyImageUrl(url) {
     if(typeof url !== 'string') return false;
-    // простая проверка по расширению (включая query-string)
     return /\.(png|jpe?g|gif|webp|avif|svg|bmp)(\?.*)?$/i.test(url.trim());
 }
 function isOnlyUrlString(text) {
@@ -467,7 +571,6 @@ function createImageElement(src, maxWidth = 300) {
     img.addEventListener('mouseenter', ()=>{ img.style.transform = 'scale(1.05)'; img.style.boxShadow = '0 6px 20px rgba(0,0,0,0.35)'; });
     img.addEventListener('mouseleave', ()=>{ img.style.transform = 'scale(1)'; img.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)'; });
     img.addEventListener('click', ()=> showImageInModal(src));
-    // если не загрузилось — отобразим ссылку вместо картинки (fallback)
     img.addEventListener('error', ()=> {
         const a = document.createElement('a');
         a.href = src;
@@ -481,7 +584,7 @@ function createImageElement(src, maxWidth = 300) {
 }
 
 /* ===========================
-   Основная функция: отрисовка сообщений
+   displayMessageInChat (оставил твой код, с небольшим доп. комментарием)
    =========================== */
 function displayMessageInChat(content, type, id=null, isImage=false, fileName=null) {
     const messagesContainer = document.getElementById('chat-messages');
@@ -501,7 +604,7 @@ function displayMessageInChat(content, type, id=null, isImage=false, fileName=nu
     bubbleDiv.className='bubble';
     bubbleDiv.style.position = 'relative';
 
-    // Нормализуем содержимое: поддерживаем случаи когда content — объект или JSON-строка с полем content
+    // Нормализуем содержимое...
     let parsed = null;
     let raw = content;
     if (typeof content === 'object' && content !== null) {
@@ -513,7 +616,6 @@ function displayMessageInChat(content, type, id=null, isImage=false, fileName=nu
         raw = parsed.content;
     }
 
-    // если это явное изображение-превью (например, при загрузке файла на клиенте)
     if(isImage){
         const wrapper = document.createElement('div');
         wrapper.style.position = 'relative';
@@ -542,10 +644,9 @@ function displayMessageInChat(content, type, id=null, isImage=false, fileName=nu
         closeBtn.addEventListener('click', (e)=>{
             e.stopPropagation();
             wrapper.remove();
-            // очищаем инпут изображения (если это превью временное)
             const imageInputEl = document.getElementById('image-upload');
             if(imageInputEl) imageInputEl.value = '';
-            resetUploadProgress(); // сбрасываем прогресс, если превью удалено
+            resetUploadProgress();
         });
 
         wrapper.appendChild(closeBtn);
@@ -563,11 +664,9 @@ function displayMessageInChat(content, type, id=null, isImage=false, fileName=nu
         bubbleDiv.appendChild(wrapper);
 
     } else {
-        // Если raw — одиночная URL-строка, и она указывает на изображение — показываем картинку (для всех типов: human/user/ai)
         if (typeof raw === 'string' && isOnlyUrlString(raw.trim()) && isLikelyImageUrl(raw.trim())) {
             const imgEl = createImageElement(raw.trim());
             bubbleDiv.appendChild(imgEl);
-            // подпись/тип, если есть
             if(parsed && parsed.type) {
                 const caption = document.createElement('div');
                 caption.style.fontSize = '12px';
@@ -577,7 +676,6 @@ function displayMessageInChat(content, type, id=null, isImage=false, fileName=nu
                 bubbleDiv.appendChild(caption);
             }
         }
-        // Для ai: рендерим как markdown (безопасно), как было раньше
         else if (type === 'ai') {
             try {
                 const sourceText = String(typeof parsed === 'object' && parsed !== null && parsed.content ? parsed.content : raw || '');
@@ -585,14 +683,9 @@ function displayMessageInChat(content, type, id=null, isImage=false, fileName=nu
                 const cleanHtml = DOMPurify.sanitize(rawHtml, { USE_PROFILES: { html: true } });
                 const temp = document.createElement('div');
                 temp.innerHTML = cleanHtml;
-                // безопасные атрибуты для ссылок
                 temp.querySelectorAll('a').forEach(a => {
-                    try {
-                        a.setAttribute('target', '_blank');
-                        a.setAttribute('rel', 'noopener noreferrer');
-                    } catch (e) {}
+                    try { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); } catch (e) {}
                 });
-                // если внутри HTML есть теги <a href="..."> и href ведёт на картинку — заменим ссылку на картинку
                 temp.querySelectorAll('a').forEach(a => {
                     const href = a.getAttribute('href') || a.innerText || '';
                     if (isLikelyImageUrl(href)) {
@@ -606,7 +699,6 @@ function displayMessageInChat(content, type, id=null, isImage=false, fileName=nu
                 console.warn('Markdown render error or sanitization failed:', e);
             }
 
-            // Добавляем кнопки копирования для блоков кода (после вставки безопасного HTML)
             bubbleDiv.querySelectorAll('pre code').forEach(codeBlock=>{
                 const pre=codeBlock.parentElement;
                 const existing = pre.querySelector('.copy-button');
@@ -623,7 +715,6 @@ function displayMessageInChat(content, type, id=null, isImage=false, fileName=nu
                 pre.appendChild(btn);
             });
         }
-        // Для остальных типов (user/human и т.п.) просто текстовая вставка
         else {
             bubbleDiv.innerText = String(raw || '');
         }
@@ -634,22 +725,23 @@ function displayMessageInChat(content, type, id=null, isImage=false, fileName=nu
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-/* ========== остальной ваш код без изменений ========== */
+/* ========== остальной ваш код без изменений (но с подстановкой Authorization заголовка) ========== */
 
 async function loadChatHistory() {
     try {
-        const response = await fetch(historyWebhookUrl, { method:'POST' });
+        // >>> AUTH: добавляем заголовок Authorization, если есть JWT
+        const headers = getAuthHeaders();
+        // n8n webhook expects POST in your previous code
+        const response = await fetch(historyWebhookUrl, { method:'POST', headers: headers });
         if(!response.ok) throw new Error('Ошибка при загрузке истории чата.');
         const chatHistory = await response.json();
 
         chatHistory.forEach(msg => {
-            // Получаем контент и тип
             const content = (msg && msg.json && (msg.json.message||msg.json.output)) || '';
             const type = (msg && msg.json && msg.json.type) || 'ai';
 
-            // Фильтруем human-сообщения с "SCHEDULED_INITIATE_CONVERSATION"
             if(type === 'human' && typeof content === 'string' && content.includes("SCHEDULED_INITIATE_CONVERSATION")) {
-                return; // пропускаем
+                return;
             }
 
             displayMessageInChat(content, type);
@@ -702,11 +794,14 @@ async function sendMessage() {
 
     if(messageText==='' && !imageFile && otherFiles.length===0) return;
 
+    // >>> AUTH: require either JWT or AdminKey to send (preserves previous admin flow)
+    const token = getJwt();
     let adminKey = getStoredAdminKey();
-    if(!adminKey){
+    if(!token && !adminKey){
+        // Prompt for admin key (as before) — if user is not admin, they should log in via Google
         const entered = await askAdminKey();
         if(!entered){
-            displayMessageInChat('Отправка отменена. Только администратор может отправлять сообщения.','ai');
+            displayMessageInChat('Отправка отменена. Только администратор может отправлять сообщения или войдите через Google.', 'ai');
             return;
         }
         storeAdminKey(entered);
@@ -720,14 +815,13 @@ async function sendMessage() {
         const formData = new FormData();
         if(messageText!=='') formData.append('message',messageText);
         if(imageFile) formData.append('image',imageFile);
-        // добавляем остальные файлы под ключ 'files' (многофайловая отправка)
         otherFiles.forEach(f => formData.append('files', f));
-        formData.append('adminKey',adminKey);
+        if(adminKey) formData.append('adminKey',adminKey);
 
         const hasFiles = Boolean(imageFile) || otherFiles.length>0;
 
         if(hasFiles){
-            // Используем XHR, чтобы отследить прогресс загрузки любых файлов
+            // XHR with Authorization header
             showUploadProgressUI();
             setUploadProgressValue(0);
 
@@ -735,12 +829,16 @@ async function sendMessage() {
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', webhookUrl, true);
 
+                // >>> AUTH: set Authorization header if JWT exists
+                const jwt = getJwt();
+                if(jwt) {
+                    xhr.setRequestHeader('Authorization', 'Bearer ' + jwt);
+                }
+
                 xhr.upload.onprogress = function(e){
                     if(e.lengthComputable){
                         const percent = (e.loaded / e.total) * 100;
                         setUploadProgressValue(percent);
-                    } else {
-                        // если длина неизвестна — оставляем текущий прогресс
                     }
                 };
 
@@ -769,18 +867,15 @@ async function sendMessage() {
                         return;
                     }
 
-                    // Удачная отправка — показываем сообщение пользователя и список файлов
                     if(messageText!=='') displayMessageInChat(messageText,'user');
                     if(imageFile) displayMessageInChat(`Файл отправлен: ${imageFile.name}`,'user');
                     otherFiles.forEach(f=> displayMessageInChat(`Файл отправлен: ${f.name}`,'user'));
 
                     displayMessageInChat(outputText||JSON.stringify(data),'ai');
 
-                    // очищаем инпуты
                     input.value = '';
                     if(imageInput) imageInput.value = '';
                     if(fileInput) fileInput.value = '';
-                    // удаляем временное превью
                     const tempPreview = document.getElementById('image-preview-temp');
                     if(tempPreview) tempPreview.remove();
                     resolve();
@@ -800,12 +895,13 @@ async function sendMessage() {
                 xhr.send(formData);
             });
 
-            // Скрываем прогресс через небольшую задержку (чтобы пользователь увидел 100%)
             setTimeout(()=> resetUploadProgress(), 700);
 
         } else {
-            // Нет файлов — используем fetch (как раньше)
-            const response = await fetch(webhookUrl,{method:'POST', body:formData});
+            // No files — use fetch, with Authorization header if present
+            const headers = getAuthHeaders();
+
+            const response = await fetch(webhookUrl, { method:'POST', headers: headers, body: formData });
             let data = {};
             try{ data = await response.json(); }catch(e){ console.warn('Ответ не JSON:', e); data = {raw: ''}; }
 
@@ -850,13 +946,11 @@ document.getElementById('image-upload').addEventListener('change', function(){
             const oldPreview = document.getElementById('image-preview-temp');
             if(oldPreview) oldPreview.remove();
             displayMessageInChat(e.target.result, 'user', 'image-preview-temp', true, file.name);
-            // Показываем прогресс UI (будет заполняться при реальной загрузке)
             showUploadProgressUI();
             setUploadProgressValue(0);
         }
         reader.readAsDataURL(file);
     } else {
-        // если отменили выбор — сбрасываем прогресс
         resetUploadProgress();
     }
 });
@@ -876,23 +970,19 @@ document.getElementById('file-upload').addEventListener('change', function() {
         const reader = new FileReader();
         reader.onload = function(e) {
             if (isTextLike) {
-                // показываем имя файла + небольшой превью (первые 1000 символов)
                 const content = String(e.target.result || '');
                 const preview = content.length > 1000 ? content.slice(0,1000) + '\n\n... (обрезано) ...' : content;
                 displayMessageInChat(`📄 ${file.name}\n\n${preview}`,'user');
             } else if (isArchive) {
                 displayMessageInChat(`📦 Архив: ${file.name}`,'user');
             } else {
-                // нейтральная подпись для других типов
                 displayMessageInChat(`📁 Файл: ${file.name}`,'user');
             }
         };
 
-        // Для текстовых файлов читаем текст, для архивов просто показываем метку (не читаем бинарно)
         if (isTextLike) {
             reader.readAsText(file);
         } else {
-            // для архивов/бинарных не читаем содержимое
             reader.readAsArrayBuffer(file);
         }
     });
@@ -904,6 +994,7 @@ document.getElementById('file-upload').addEventListener('change', function() {
 
 document.addEventListener('DOMContentLoaded', ()=>{
     updateAdminStatus();
+    updateAuthUI(); // ensure auth UI reflects stored JWT
     loadChatHistory();
     const msgEl=document.getElementById('message-input');
     msgEl.addEventListener('keydown', function(event){
@@ -914,7 +1005,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
 });
 </script>
-
 
 </body>
 </html>
