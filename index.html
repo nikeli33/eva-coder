@@ -362,10 +362,89 @@ const webhookUrl = 'https://n8n.eva-dragon.ru/webhook/my-chat';
 const historyWebhookUrl = 'https://n8n.eva-dragon.ru/webhook/get-chat-history';
 const ADMIN_SESSION_KEY = 'eva_adminKey';
 
+/* ========== JWT ADDED: config keys ========== */
+// JWT storage key
+const JWT_KEY = 'eva_jwt';
+// URL of your python-api auth endpoints (adjust if different)
+const AUTH_URL = 'https://api.eva-dragon.ru/auth';
+/* ============================================ */
+
 function getStoredAdminKey() { return sessionStorage.getItem(ADMIN_SESSION_KEY); }
-function storeAdminKey(key) { if(key) sessionStorage.setItem(ADMIN_SESSION_KEY, key); updateAdminStatus(); }
-function clearAdminKey() { sessionStorage.removeItem(ADMIN_SESSION_KEY); updateAdminStatus(); }
-function updateAdminStatus() { document.getElementById('admin-status').innerText = getStoredAdminKey() ? 'Админ: да' : 'Админ: нет'; }
+
+/* ========== JWT ADDED: store adminKey also tries to obtain JWT (non-blocking) ========== */
+function storeAdminKey(key) {
+    if(key) sessionStorage.setItem(ADMIN_SESSION_KEY, key);
+    updateAdminStatus();
+
+    // Try to exchange entered adminKey for JWT from backend (non-blocking)
+    // We keep original adminKey in sessionStorage for compatibility, but we also store JWT when available.
+    (async function fetchJwt() {
+        try {
+            const resp = await fetch(`${AUTH_URL}/admin`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adminKey: key })
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data && data.access_token) {
+                    sessionStorage.setItem(JWT_KEY, data.access_token);
+                    // update UI to reflect JWT presence
+                    updateAdminStatus();
+                }
+            } else {
+                // если backend вернул 403 — удалим ранее сохранённый JWT, но оставим adminKey (совместимость)
+                if (resp.status === 403) {
+                    sessionStorage.removeItem(JWT_KEY);
+                    // не удаляем adminKey — чтобы не ломать старую логику, но информируем пользователя
+                    displayMessageInChat('Неверный пароль администратора (проверка сервера).', 'ai');
+                }
+            }
+        } catch (e) {
+            // сеть/серверная ошибка — ничего критичного, оставляем локальный adminKey
+            console.warn('JWT fetch error', e);
+        }
+    })();
+}
+/* ============================================ */
+
+function clearAdminKey() {
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    updateAdminStatus();
+}
+
+/* ========== JWT ADDED: JWT helpers ========== */
+function getStoredJWT() { return sessionStorage.getItem(JWT_KEY); }
+function clearJWT() { sessionStorage.removeItem(JWT_KEY); }
+
+/**
+ * verifyStoredJWT - если JWT есть, проверяет его у бекенда (/auth/verify).
+ * При невалидности удаляет JWT.
+ */
+async function verifyStoredJWT() {
+    const jwt = getStoredJWT();
+    if (!jwt) return;
+    try {
+        const resp = await fetch(`${AUTH_URL}/verify`, {
+            method: 'GET',
+            headers: { 'Authorization': 'Bearer ' + jwt }
+        });
+        if (!resp.ok) {
+            // сбрасываем токен если он невалиден
+            clearJWT();
+        }
+    } catch (e) {
+        console.warn('JWT verify error', e);
+        // Не удаляем токен при сетевой ошибке — пусть останется, проверим позже при следующей попытке.
+    }
+}
+/* ============================================ */
+
+function updateAdminStatus() {
+    // Consider admin active if either legacy adminKey or JWT exists
+    const isAdmin = Boolean(getStoredAdminKey()) || Boolean(getStoredJWT());
+    document.getElementById('admin-status').innerText = isAdmin ? 'Админ: да' : 'Админ: нет';
+}
 
 // Кастомный ввод пароля через модальное окно
 function askAdminKey() {
@@ -660,7 +739,11 @@ async function loadChatHistory() {
     }
 }
 
-function adminLogout() { clearAdminKey(); displayMessageInChat('Вы вышли из роли администратора.','ai'); }
+function adminLogout() { 
+    clearAdminKey(); 
+    clearJWT(); /* JWT ADDED: also clear stored JWT on logout */
+    displayMessageInChat('Вы вышли из роли администратора.','ai'); 
+}
 
 // -------- Прогресс-бар: функции управления --------
 function showUploadProgressUI() {
@@ -722,9 +805,13 @@ async function sendMessage() {
         if(imageFile) formData.append('image',imageFile);
         // добавляем остальные файлы под ключ 'files' (многофайловая отправка)
         otherFiles.forEach(f => formData.append('files', f));
+        // legacy: keep sending adminKey for backward compatibility
         formData.append('adminKey',adminKey);
 
         const hasFiles = Boolean(imageFile) || otherFiles.length>0;
+
+        // obtain jwt if exists (may be null on first request)
+        const jwt = getStoredJWT();
 
         if(hasFiles){
             // Используем XHR, чтобы отследить прогресс загрузки любых файлов
@@ -734,6 +821,11 @@ async function sendMessage() {
             await new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', webhookUrl, true);
+
+                // JWT ADDED: если есть jwt — добавляем заголовок Authorization
+                if (jwt) {
+                    try { xhr.setRequestHeader('Authorization', 'Bearer ' + jwt); } catch(e){ console.warn('xhr header set failed', e); }
+                }
 
                 xhr.upload.onprogress = function(e){
                     if(e.lengthComputable){
@@ -755,11 +847,13 @@ async function sendMessage() {
                     if(xhr.status === 403){
                         displayMessageInChat(outputText||'Доступ запрещён.','ai');
                         clearAdminKey();
+                        clearJWT(); // JWT ADDED: clear on 403 as well
                         resolve();
                         return;
                     } else if(deniedByText){
                         displayMessageInChat(outputText,'ai');
                         clearAdminKey();
+                        clearJWT();
                         resolve();
                         return;
                     } else if(xhr.status < 200 || xhr.status >= 300){
@@ -805,7 +899,12 @@ async function sendMessage() {
 
         } else {
             // Нет файлов — используем fetch (как раньше)
-            const response = await fetch(webhookUrl,{method:'POST', body:formData});
+            // JWT ADDED: добавляем Authorization заголовок если есть токен
+            const headers = {};
+            const jwtHeader = getStoredJWT();
+            if (jwtHeader) headers['Authorization'] = 'Bearer ' + jwtHeader;
+
+            const response = await fetch(webhookUrl,{method:'POST', body:formData, headers: headers});
             let data = {};
             try{ data = await response.json(); }catch(e){ console.warn('Ответ не JSON:', e); data = {raw: ''}; }
 
@@ -815,10 +914,12 @@ async function sendMessage() {
             if(!response.ok && response.status===403){
                 displayMessageInChat(outputText||'Доступ запрещён.','ai');
                 clearAdminKey();
+                clearJWT();
                 return;
             } else if(deniedByText){
                 displayMessageInChat(outputText,'ai');
                 clearAdminKey();
+                clearJWT();
                 return;
             } else if(!response.ok){
                 console.error('Ошибка сервера:',response.status,data);
@@ -903,7 +1004,11 @@ document.getElementById('file-upload').addEventListener('change', function() {
 
 
 document.addEventListener('DOMContentLoaded', ()=>{
-    updateAdminStatus();
+    // JWT ADDED: verify stored JWT (non-blocking) and then update status
+    verifyStoredJWT().finally(()=> {
+        updateAdminStatus();
+    });
+
     loadChatHistory();
     const msgEl=document.getElementById('message-input');
     msgEl.addEventListener('keydown', function(event){
@@ -918,4 +1023,3 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 </body>
 </html>
-
