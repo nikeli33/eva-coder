@@ -904,6 +904,8 @@ async function sendMessage() {
             const jwtHeader = getStoredJWT();
             if (jwtHeader) headers['Authorization'] = 'Bearer ' + jwtHeader;
 
+            console.log('JWT отправляется (fetch):', jwtHeader);
+
             const response = await fetch(webhookUrl,{method:'POST', body:formData, headers: headers});
             let data = {};
             try{ data = await response.json(); }catch(e){ console.warn('Ответ не JSON:', e); data = {raw: ''}; }
@@ -1023,3 +1025,4 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 </body>
 </html>
+
