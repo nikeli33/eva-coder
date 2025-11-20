@@ -602,6 +602,19 @@
             <button id="admin-logout-button" onclick="adminLogout()" title="Выйти из роли администратора">Выйти</button>
             <div class="loader" id="loader"></div>
             <div class="admin-status" id="admin-status">Админ: нет</div>
+            <button id="google-login-btn"
+                onclick="window.location.href='https://api.eva-dragon.ru/auth/google'"
+                style="
+                    padding: 10px 20px;
+                    background: #ffffff;
+                    color: #444;
+                    border-radius: 12px;
+                    border: 1px solid #ddd;
+                    cursor: pointer;
+                    font-weight: 600;
+                            ">
+                Войти через Google
+            </button>
 
             <div id="upload-progress" class="upload-progress" aria-hidden="true" role="progressbar" aria-valuemin="0" aria-valuemax="100">
                 <div style="display:flex; align-items:center; gap:10px; width:100%;">
@@ -1224,3 +1237,4 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 </body>
 </html>
+
